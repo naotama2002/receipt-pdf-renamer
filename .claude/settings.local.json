@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod init:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go build:*)",
+      "Bash(go doc:*)",
+      "Bash(./receipt-pdf-renamer:*)",
+      "Bash(echo:*)"
+    ]
+  }
+}
