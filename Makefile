@@ -1,32 +1,51 @@
-.PHONY: build install clean test fmt lint tidy run
+.PHONY: dev build build-mac build-win release-mac release-win clean test fmt lint tidy generate
 
-BINARY_NAME=receipt-pdf-renamer
-BIN_DIR=./bin
-VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-X main.version=$(VERSION)"
+# 開発モード
+dev:
+	wails dev
 
+# ビルド
 build:
-	@mkdir -p $(BIN_DIR)
-	go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/receipt-pdf-renamer
+	wails build
 
-install:
-	go install $(LDFLAGS) ./cmd/receipt-pdf-renamer
+# macOS用ビルド（Universal Binary）
+build-mac:
+	wails build -platform darwin/universal
 
+# Windows用ビルド
+build-win:
+	wails build -platform windows/amd64
+
+# macOS用リリースビルド（最適化）
+release-mac:
+	wails build -platform darwin/universal -ldflags="-s -w"
+
+# Windows用リリースビルド（最適化）
+release-win:
+	wails build -platform windows/amd64 -ldflags="-s -w"
+
+# クリーン
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf ./build/bin
+	rm -rf frontend/node_modules
 	go clean
 
+# テスト
 test:
 	go test -v ./...
 
+# フォーマット
 fmt:
 	go fmt ./...
 
+# Lint
 lint:
 	golangci-lint run
 
+# 依存関係整理
 tidy:
 	go mod tidy
 
-run: build
-	$(BIN_DIR)/$(BINARY_NAME)
+# Wails生成（バインディング更新）
+generate:
+	wails generate module

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Receipt PDF Renamer",
+  "outputfilename": "receipt-pdf-renamer",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm run build",
+  "frontend:dev:watcher": "pnpm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "naotama",
+    "email": ""
+  },
+  "info": {
+    "productName": "Receipt PDF Renamer",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2025 naotama",
+    "comments": "領収書PDFリネームツール"
+  }
+}

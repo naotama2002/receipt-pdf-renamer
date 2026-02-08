@@ -1,8 +1,11 @@
-# Binary
-/bin/
+# Build artifacts
+/build/bin/
+/dist/
 
-# Local config (per-directory overrides)
-.receipt-pdf-renamer.yaml
+# Frontend
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
 
 # Go
 *.exe
@@ -12,8 +15,6 @@
 *.dylib
 *.test
 *.out
-
-# Dependency directories
 vendor/
 
 # IDE
@@ -27,9 +28,10 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Test coverage
+# Test
 coverage.out
 coverage.html
-
-# test
 *.pdf
+
+# Local config
+.receipt-pdf-renamer.yaml

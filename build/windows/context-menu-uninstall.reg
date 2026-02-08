@@ -1,0 +1,6 @@
+Windows Registry Editor Version 5.00
+
+; Receipt PDF Renamer - PDF右クリックメニュー削除
+; 使用方法: このファイルをダブルクリックしてレジストリから削除
+
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\ReceiptPDFRenamer]

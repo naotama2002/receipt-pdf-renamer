@@ -4,40 +4,120 @@
 
 ```
 receipt-pdf-renamer/
-├── cmd/
-│   └── receipt-pdf-renamer/
-│       └── main.go              # エントリポイント
+├── main.go                    # Wailsエントリーポイント
+├── app.go                     # Appコア（バックエンドAPI）
 ├── internal/
 │   ├── ai/
-│   │   ├── provider.go          # Provider インターフェース
-│   │   ├── anthropic.go         # Anthropic Claude 実装
-│   │   └── openai.go            # OpenAI/互換 実装
+│   │   ├── provider.go        # Provider インターフェース
+│   │   ├── anthropic.go       # Anthropic Claude 実装
+│   │   └── openai.go          # OpenAI/互換 実装
 │   ├── config/
-│   │   └── config.go            # 設定ファイル読み込み
+│   │   └── config.go          # 設定ファイル読み込み・保存
 │   ├── pdf/
-│   │   └── converter.go         # PDF → 画像変換（OpenAI用）
+│   │   └── converter.go       # PDF → 画像変換（OpenAI用）
 │   ├── cache/
-│   │   └── cache.go             # キャッシュ管理
-│   ├── renamer/
-│   │   └── renamer.go           # リネームロジック
-│   └── tui/
-│       ├── model.go             # bubbletea Model
-│       ├── view.go              # 画面描画
-│       └── update.go            # イベント処理
+│   │   └── cache.go           # キャッシュ管理
+│   └── renamer/
+│       └── renamer.go         # リネームロジック
+├── frontend/                  # Svelteフロントエンド
+│   ├── src/
+│   │   ├── App.svelte         # メイン画面
+│   │   ├── lib/
+│   │   │   └── Settings.svelte # 設定画面
+│   │   └── main.ts
+│   ├── package.json
+│   └── pnpm-lock.yaml
+├── build/
+│   ├── darwin/
+│   │   └── Info.plist         # macOS設定（ファイル関連付け含む）
+│   └── windows/
+│       ├── context-menu-install.reg
+│       └── context-menu-uninstall.reg
+├── .github/workflows/
+│   ├── ci.yml                 # CI（build, test, lint, fmt, tidy）
+│   ├── build.yml              # ビルド確認（macOS/Windows）
+│   └── release.yml            # リリース（tag push時）
 ├── docs/
-│   ├── requirements.md          # 要件定義
-│   ├── architecture.md          # このファイル
-│   └── design-details.md        # 詳細設計
+│   ├── architecture.md        # このファイル
+│   ├── design-details.md      # 詳細設計
+│   └── requirements.md        # 要件定義
 ├── go.mod
 ├── go.sum
+├── wails.json
 └── Makefile
 ```
 
 ---
 
-## AI プロバイダー抽象化
+## 技術スタック
 
-### Provider インターフェース
+| 項目 | 技術 |
+|------|------|
+| GUIフレームワーク | Wails v2 |
+| フロントエンド | Svelte + TypeScript |
+| バックエンド | Go |
+| APIキー管理 | go-keyring（OS標準キーチェーン） |
+
+---
+
+## バックエンドAPI（app.go）
+
+フロントエンドから呼び出されるメソッド:
+
+### ファイル操作
+
+| メソッド | 説明 |
+|---------|------|
+| `AddFiles(paths []string)` | PDFファイルを追加 |
+| `GetFiles()` | ファイル一覧取得 |
+| `ClearFiles()` | ファイル一覧クリア |
+| `ToggleFileSelection(id int)` | 選択切り替え |
+| `SelectAll()` / `DeselectAll()` | 全選択/全解除 |
+
+### 解析・リネーム
+
+| メソッド | 説明 |
+|---------|------|
+| `AnalyzeFiles()` | AI解析を開始（非同期） |
+| `RenameFiles()` | 選択ファイルをリネーム |
+
+### ダイアログ
+
+| メソッド | 説明 |
+|---------|------|
+| `OpenFileDialog()` | ファイル選択ダイアログ |
+| `OpenFolderDialog()` | フォルダ選択ダイアログ |
+| `ScanFolder(path)` | フォルダ内のPDFをスキャン |
+
+### 設定
+
+| メソッド | 説明 |
+|---------|------|
+| `GetSettings()` | 現在の設定取得 |
+| `SaveSettingsWithEndpoint(...)` | 設定保存 |
+| `SaveAPIKey(provider, key)` | APIキーをキーチェーンに保存 |
+| `GetAPIKey(provider)` | キーチェーンからAPIキー取得 |
+| `DeleteAPIKey(provider)` | APIキー削除 |
+
+### キャッシュ
+
+| メソッド | 説明 |
+|---------|------|
+| `ClearCache()` | キャッシュクリア |
+| `GetCacheCount()` | キャッシュ件数取得 |
+
+---
+
+## イベント（Backend → Frontend）
+
+| イベント名 | タイミング |
+|-----------|-----------|
+| `files-updated` | ファイル状態が更新された時 |
+| `analysis-complete` | 全ファイルの解析完了時 |
+
+---
+
+## AI プロバイダー抽象化
 
 ```go
 // internal/ai/provider.go
@@ -49,134 +129,15 @@ type ReceiptInfo struct {
     Date    string // YYYYMMDD形式
     Service string // サービス名
 }
-
-// ファクトリー関数
-func NewProvider(cfg *config.AIConfig) (Provider, error) {
-    switch cfg.Provider {
-    case "anthropic":
-        return NewAnthropicProvider(cfg)
-    case "openai":
-        return NewOpenAIProvider(cfg)
-    default:
-        return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
-    }
-}
 ```
 
 ### Anthropic 実装
-
-```go
-// internal/ai/anthropic.go
-type AnthropicProvider struct {
-    client *anthropic.Client
-    model  string
-}
-
-func (p *AnthropicProvider) AnalyzeReceipt(ctx context.Context, pdfPath string) (*ReceiptInfo, error) {
-    // PDFを直接Base64エンコードして送信
-    pdfData, _ := os.ReadFile(pdfPath)
-    base64PDF := base64.StdEncoding.EncodeToString(pdfData)
-
-    // Claude APIに送信（application/pdf）
-    // ...
-}
-```
+- PDFを直接Base64エンコードして送信
+- `application/pdf` として処理
 
 ### OpenAI/互換 実装
-
-```go
-// internal/ai/openai.go
-type OpenAIProvider struct {
-    client    *openai.Client
-    model     string
-    converter *pdf.Converter
-}
-
-func (p *OpenAIProvider) AnalyzeReceipt(ctx context.Context, pdfPath string) (*ReceiptInfo, error) {
-    // PDFを画像に変換
-    imageData, _ := p.converter.ToImage(pdfPath)
-    base64Image := base64.StdEncoding.EncodeToString(imageData)
-
-    // Vision APIに送信
-    // ...
-}
-```
-
----
-
-## PDF → 画像変換（OpenAI用）
-
-OpenAI/互換APIはPDFを直接受け付けないため、画像に変換が必要。
-
-```go
-// internal/pdf/converter.go
-type Converter struct{}
-
-func (c *Converter) ToImage(pdfPath string) ([]byte, error) {
-    // poppler の pdftoppm を使用
-    cmd := exec.Command("pdftoppm", "-png", "-singlefile", pdfPath, "-")
-    return cmd.Output()
-}
-
-func (c *Converter) IsAvailable() bool {
-    _, err := exec.LookPath("pdftoppm")
-    return err == nil
-}
-```
-
-**注意**: OpenAI互換を使う場合は `poppler` のインストールが必要
-
-```bash
-# macOS
-brew install poppler
-
-# Ubuntu
-apt install poppler-utils
-```
-
----
-
-## 設定
-
-```go
-// internal/config/config.go
-type Config struct {
-    AI     AIConfig     `yaml:"ai"`
-    Cache  CacheConfig  `yaml:"cache"`
-    Format FormatConfig `yaml:"format"`
-}
-
-type AIConfig struct {
-    Provider   string `yaml:"provider"`    // "anthropic" or "openai"
-    BaseURL    string `yaml:"base_url"`    // OpenAI互換用（オプション）
-    APIKey     string `yaml:"api_key"`
-    Model      string `yaml:"model"`
-    MaxWorkers int    `yaml:"max_workers"`
-}
-
-type CacheConfig struct {
-    Enabled bool `yaml:"enabled"`
-    TTL     int  `yaml:"ttl"`  // 日数、0=無期限
-}
-
-type FormatConfig struct {
-    Template   string `yaml:"template"`
-    DateFormat string `yaml:"date_format"`
-}
-```
-
----
-
-## 依存ライブラリ
-
-| パッケージ | 用途 |
-|-----------|------|
-| `github.com/charmbracelet/bubbletea` | TUIフレームワーク |
-| `github.com/charmbracelet/lipgloss` | TUIスタイリング |
-| `github.com/anthropics/anthropic-sdk-go` | Anthropic Claude API |
-| `github.com/sashabaranov/go-openai` | OpenAI API（互換含む） |
-| `gopkg.in/yaml.v3` | 設定ファイル |
-| `github.com/spf13/cobra` | CLIフラグ |
+- PDFを画像に変換して送信（Vision API）
+- `poppler` の `pdftoppm` が必要
 
 ---
 
@@ -184,134 +145,53 @@ type FormatConfig struct {
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   main.go   │────▶│   config    │────▶│    tui      │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-                           ┌───────────────────┼───────────────────┐
-                           │                   │                   │
-                           ▼                   ▼                   ▼
-                    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-                    │    cache    │     │ ai/provider │     │   renamer   │
-                    └─────────────┘     └──────┬──────┘     └─────────────┘
-                                               │
-                                   ┌───────────┴───────────┐
-                                   │                       │
-                                   ▼                       ▼
-                            ┌─────────────┐         ┌─────────────┐
-                            │  anthropic  │         │   openai    │
-                            │ (PDF直接)   │         │ (画像変換)  │
-                            └─────────────┘         └──────┬──────┘
-                                                           │
-                                                           ▼
-                                                    ┌─────────────┐
-                                                    │ pdf/convert │
-                                                    └─────────────┘
+│   main.go   │────▶│    App      │────▶│  Frontend   │
+│  (Wails)    │     │  (app.go)   │     │  (Svelte)   │
+└─────────────┘     └──────┬──────┘     └─────────────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+           ▼               ▼               ▼
+    ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+    │    cache    │ │ ai/provider │ │   renamer   │
+    └─────────────┘ └──────┬──────┘ └─────────────┘
+                           │
+               ┌───────────┴───────────┐
+               │                       │
+               ▼                       ▼
+        ┌─────────────┐         ┌─────────────┐
+        │  anthropic  │         │   openai    │
+        │ (PDF直接)   │         │ (画像変換)  │
+        └─────────────┘         └──────┬──────┘
+                                       │
+                                       ▼
+                                ┌─────────────┐
+                                │ pdf/convert │
+                                └─────────────┘
 ```
 
 ---
 
-## 実行モード
+## ファイル状態（ItemStatus）
 
-### モード分岐
-
-```
-┌─────────────┐
-│   main.go   │
-└──────┬──────┘
-       │
-       ▼
-   --exec ?
-       │
-   ┌───┴───┐
-   │       │
-   ▼       ▼
-  Yes      No
-   │       │
-   ▼       ▼
-┌──────┐  ┌──────┐
-│ヘッド│  │ TUI  │
-│レス  │  │モード│
-└──────┘  └──────┘
-```
-
-### TUIモード 状態遷移
-
-```
-                    ┌─────────────┐
-                    │   起動      │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │ PDFスキャン │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │  AI解析中   │ ← 並列処理（max_workers制御）
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-        ┌──────────│ ファイル選択 │──────────┐
-        │          └──────┬──────┘          │
-        │                 │                  │
-        ▼                 ▼                  ▼
-   [Space]           [Enter]              [q]
-   選択切替        リネーム実行            終了
-        │                 │
-        │                 ▼
-        │          ┌─────────────┐
-        │          │  完了表示   │
-        │          └─────────────┘
-        │                 │
-        └─────────────────┘
-```
-
-### ヘッドレスモード フロー
-
-```
-┌─────────────┐
-│   起動      │
-│ (--exec)    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ PDFスキャン │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  AI解析     │ ← 並列処理
-│ (進捗表示)  │
-└──────┬──────┘
-       │
-       ▼
-   --dry-run ?
-       │
-   ┌───┴───┐
-   │       │
-   ▼       ▼
-  Yes      No
-   │       │
-   ▼       ▼
-┌──────┐  ┌──────┐
-│結果  │  │リネーム│
-│表示  │  │実行   │
-└──────┘  └──────┘
-       │
-       ▼
-┌─────────────┐
-│ 完了サマリ  │
-│ (exit code) │
-└─────────────┘
-```
-
-### Exit Code（ヘッドレスモード）
-
-| Code | 意味 |
+| 状態 | 説明 |
 |------|------|
-| 0 | 全て成功 |
-| 1 | 一部失敗 |
-| 2 | 全て失敗 / エラー |
+| `pending` | 追加直後、解析待ち |
+| `analyzing` | AI解析中 |
+| `ready` | 解析完了、リネーム可能 |
+| `cached` | キャッシュから取得 |
+| `renamed` | リネーム完了 |
+| `error` | エラー発生 |
+| `skipped` | スキップ（既にリネーム済み形式） |
+
+---
+
+## 依存ライブラリ
+
+| パッケージ | 用途 |
+|-----------|------|
+| `github.com/wailsapp/wails/v2` | GUIフレームワーク |
+| `github.com/anthropics/anthropic-sdk-go` | Anthropic Claude API |
+| `github.com/sashabaranov/go-openai` | OpenAI API（互換含む） |
+| `github.com/zalando/go-keyring` | OSキーチェーン連携 |
+| `gopkg.in/yaml.v3` | 設定ファイル |

@@ -47,7 +47,7 @@ func DefaultConfig() *Config {
 		Format: FormatConfig{
 			Template:       "{{.Date}}-{{.Service}}-{{.OriginalName}}",
 			DateFormat:     "20060102",
-			ServicePattern: "{{.Service}}",
+			ServicePattern: "",
 		},
 	}
 }
@@ -125,7 +125,8 @@ cache:
 format:
   # Output: YYYYMMDD-{service_pattern}-original.pdf
   # Available: {{.Service}} (service name from receipt)
-  service_pattern: "{{.Service}}"
+  # Set your pattern before renaming (e.g., "{{.Service}}" or "MyCompany")
+  service_pattern: ""
   date_format: "20060102"  # Go date format (YYYYMMDD)
 `
 
@@ -232,6 +233,47 @@ func DefaultCachePath() string {
 	return filepath.Join(home, ".cache", "receipt-pdf-renamer")
 }
 
+// SaveConfig は設定をグローバル設定ファイルに保存する
+// Note: APIキーはKeyringで管理するため、ファイルには保存しない
+func (c *Config) Save() error {
+	path := DefaultConfigPath()
+
+	// APIキーを除いた設定を保存用にコピー
+	saveConfig := &Config{
+		AI: AIConfig{
+			Provider:   c.AI.Provider,
+			BaseURL:    c.AI.BaseURL,
+			Model:      c.AI.Model,
+			MaxWorkers: c.AI.MaxWorkers,
+			// APIKey は保存しない（Keyringで管理）
+		},
+		Cache: c.Cache,
+		Format: FormatConfig{
+			ServicePattern: c.Format.ServicePattern,
+			DateFormat:     c.Format.DateFormat,
+			// Template は ServicePattern から自動生成されるため保存不要
+		},
+	}
+
+	data, err := yaml.Marshal(saveConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	header := `# receipt-pdf-renamer configuration
+# This file is managed by the GUI application.
+# API keys are stored securely in the system keyring.
+
+`
+	content := header + string(data)
+
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
 // LocalConfigFileName はローカル設定ファイル名
 const LocalConfigFileName = ".receipt-pdf-renamer.yaml"
 
@@ -294,7 +336,7 @@ func SaveLocalConfig(directory string, servicePattern string) error {
 	// 既存のローカル設定を読み込む
 	local := &LocalConfig{}
 	if data, err := os.ReadFile(localPath); err == nil {
-		yaml.Unmarshal(data, local)
+		_ = yaml.Unmarshal(data, local) // エラーは無視してデフォルト値で続行
 	}
 
 	// サービスパターンを更新
