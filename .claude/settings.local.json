@@ -6,7 +6,21 @@
       "Bash(go build:*)",
       "Bash(go doc:*)",
       "Bash(./receipt-pdf-renamer:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(wc:*)",
+      "WebSearch",
+      "Bash(wails version:*)",
+      "Bash(go install:*)",
+      "Bash(export PATH=\"$PATH:$HOME/go/bin\")",
+      "Bash(wails doctor:*)",
+      "Bash(npm install:*)",
+      "Bash(go get:*)",
+      "Bash(wails build:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(make test:*)",
+      "Bash(make lint:*)",
+      "Bash(make fmt:*)",
+      "Bash(make build:*)"
     ]
   }
 }

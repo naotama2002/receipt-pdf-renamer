@@ -1,0 +1,13 @@
+Windows Registry Editor Version 5.00
+
+; Receipt PDF Renamer - PDF右クリックメニュー登録
+; 使用方法: このファイルをダブルクリックしてレジストリに登録
+; 注意: APP_PATH を実際のインストールパスに変更してください
+
+; PDFファイルの右クリックメニューに「Receipt PDF Renamerで開く」を追加
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\ReceiptPDFRenamer]
+@="Receipt PDF Renamerで開く"
+"Icon"="\"C:\\Program Files\\Receipt PDF Renamer\\receipt-pdf-renamer.exe\",0"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\ReceiptPDFRenamer\command]
+@="\"C:\\Program Files\\Receipt PDF Renamer\\receipt-pdf-renamer.exe\" \"%1\""
