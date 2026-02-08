@@ -72,6 +72,7 @@ export namespace main {
 	    provider: string;
 	    model: string;
 	    hasApiKey: boolean;
+	    apiKeySource: string;
 	    cacheEnabled: boolean;
 	    cacheCount: number;
 	    servicePattern: string;
@@ -85,6 +86,7 @@ export namespace main {
 	        this.provider = source["provider"];
 	        this.model = source["model"];
 	        this.hasApiKey = source["hasApiKey"];
+	        this.apiKeySource = source["apiKeySource"];
 	        this.cacheEnabled = source["cacheEnabled"];
 	        this.cacheCount = source["cacheCount"];
 	        this.servicePattern = source["servicePattern"];

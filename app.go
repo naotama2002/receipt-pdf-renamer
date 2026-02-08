@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -68,9 +69,19 @@ type RenameResult struct {
 	SkippedCount int `json:"skippedCount"`
 }
 
+// APIKeySource はAPIキーの取得元を表す
+type APIKeySource string
+
+const (
+	APIKeySourceNone       APIKeySource = "none"
+	APIKeySourceConfigFile APIKeySource = "config_file"
+	APIKeySourceEnvVar     APIKeySource = "env_var"
+	APIKeySourceKeyring    APIKeySource = "keyring"
+)
+
 // App はWailsアプリケーションの構造体
 type App struct {
-	ctx      context.Context
+	ctx      context.Context //nolint:containedctx // Wails requires context in struct
 	config   *config.Config
 	provider ai.Provider
 	cache    *cache.Cache
@@ -78,6 +89,14 @@ type App struct {
 
 	files []FileItem
 	mu    sync.RWMutex
+
+	// アプリ起動時にファイルが渡された場合のバッファ
+	pendingFiles []string
+	pendingMu    sync.Mutex
+	domReady     bool
+
+	// APIキーの取得元
+	apiKeySource APIKeySource
 }
 
 // NewApp creates a new App application struct
@@ -94,7 +113,20 @@ func (a *App) Startup(ctx context.Context) {
 }
 
 // DomReady is called when the DOM is ready
-func (a *App) DomReady(ctx context.Context) {
+func (a *App) DomReady(_ context.Context) {
+	// Mark DOM as ready
+	a.pendingMu.Lock()
+	a.domReady = true
+	pendingFiles := a.pendingFiles
+	a.pendingFiles = nil
+	a.pendingMu.Unlock()
+
+	// Process any pending files from OnFileOpen
+	if len(pendingFiles) > 0 {
+		a.AddFiles(pendingFiles)
+		runtime.EventsEmit(a.ctx, "files-updated", a.GetFiles())
+	}
+
 	// Process command line arguments (for Windows context menu)
 	args := os.Args[1:]
 	if len(args) > 0 {
@@ -117,7 +149,16 @@ func (a *App) Shutdown(ctx context.Context) {
 
 // OnFileOpen is called when a file is opened via "Open With" on macOS
 func (a *App) OnFileOpen(filePath string) {
-	// Add the file to the list
+	a.pendingMu.Lock()
+	defer a.pendingMu.Unlock()
+
+	// If DOM is not ready yet, buffer the file
+	if !a.domReady {
+		a.pendingFiles = append(a.pendingFiles, filePath)
+		return
+	}
+
+	// DOM is ready, add the file directly
 	a.AddFiles([]string{filePath})
 
 	// Emit event to update the frontend
@@ -131,11 +172,44 @@ func (a *App) initializeServices() error {
 	}
 	a.config = cfg
 
-	provider, err := ai.NewProvider(&cfg.AI)
-	if err != nil {
-		return fmt.Errorf("failed to create AI provider: %w", err)
+	// APIキーの取得元を特定
+	a.apiKeySource = a.detectAPIKeySource()
+
+	// KeyringにAPIキーがあり、configにない場合はKeyringから読み込む
+	if a.apiKeySource == APIKeySourceNone && cfg.AI.Provider != "" {
+		if keyringKey, err := a.getAPIKeyFromKeyring(cfg.AI.Provider); err == nil && keyringKey != "" {
+			cfg.AI.APIKey = keyringKey
+			a.apiKeySource = APIKeySourceKeyring
+		}
+	} else if a.apiKeySource == APIKeySourceNone {
+		// プロバイダーが未設定の場合、Keychainに保存されているキーを探す
+		for _, p := range []string{"anthropic", "openai"} {
+			if keyringKey, err := a.getAPIKeyFromKeyring(p); err == nil && keyringKey != "" {
+				cfg.AI.Provider = p
+				cfg.AI.APIKey = keyringKey
+				a.apiKeySource = APIKeySourceKeyring
+				// デフォルトモデルを設定
+				if cfg.AI.Model == "" {
+					switch p {
+					case "anthropic":
+						cfg.AI.Model = "claude-sonnet-4-20250514"
+					case "openai":
+						cfg.AI.Model = "gpt-4o"
+					}
+				}
+				break
+			}
+		}
 	}
-	a.provider = provider
+
+	// APIキーがある場合のみプロバイダーを初期化
+	if cfg.AI.Provider != "" && cfg.AI.APIKey != "" {
+		provider, err := ai.NewProvider(&cfg.AI)
+		if err != nil {
+			return fmt.Errorf("failed to create AI provider: %w", err)
+		}
+		a.provider = provider
+	}
 
 	cacheInstance, err := cache.New(&cfg.Cache)
 	if err != nil {
@@ -150,6 +224,36 @@ func (a *App) initializeServices() error {
 	a.renamer = renamerInstance
 
 	return nil
+}
+
+// detectAPIKeySource はAPIキーがどこから来たかを検出する
+func (a *App) detectAPIKeySource() APIKeySource {
+	if a.config == nil {
+		return APIKeySourceNone
+	}
+
+	// 設定ファイルにAPIキーが直接書かれている場合
+	// (環境変数参照 ${...} の展開後に値がある場合)
+	if a.config.AI.APIKey != "" {
+		// 環境変数からの可能性をチェック
+		if os.Getenv("ANTHROPIC_API_KEY") == a.config.AI.APIKey ||
+			os.Getenv("OPENAI_API_KEY") == a.config.AI.APIKey {
+			return APIKeySourceEnvVar
+		}
+		return APIKeySourceConfigFile
+	}
+
+	return APIKeySourceNone
+}
+
+// getAPIKeyFromKeyring はKeyringからAPIキーを取得する（内部用）
+func (a *App) getAPIKeyFromKeyring(provider string) (string, error) {
+	keyName := provider + "-api-key"
+	secret, err := keyring.Get(keyringService, keyName)
+	if err != nil {
+		return "", err
+	}
+	return secret, nil
 }
 
 // GetConfig returns the current configuration
@@ -173,6 +277,8 @@ func (a *App) HasAPIKey() bool {
 }
 
 // AddFiles adds PDF files to the list
+//
+//nolint:unparam // return value is used by frontend bindings
 func (a *App) AddFiles(paths []string) []FileItem {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -420,6 +526,11 @@ func (a *App) UpdateServicePattern(pattern string) error {
 	a.config.Format.ServicePattern = pattern
 	a.config.Format.Template = fullTemplate
 
+	// 設定をファイルに保存
+	if err := a.config.Save(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
 	// Regenerate names for all ready files
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -509,13 +620,17 @@ func (a *App) GetCacheCount() int {
 const keyringService = "receipt-pdf-renamer"
 
 // SaveAPIKey saves the API key to the system keyring
+// Note: This runs keyring operation in a goroutine to avoid blocking if Keychain dialog appears
 func (a *App) SaveAPIKey(provider, apiKey string) error {
-	keyName := provider + "-api-key"
-	if err := keyring.Set(keyringService, keyName, apiKey); err != nil {
-		return fmt.Errorf("failed to save API key: %w", err)
+	// Validate inputs
+	if provider == "" {
+		return fmt.Errorf("provider is required")
+	}
+	if apiKey == "" {
+		return fmt.Errorf("API key is required")
 	}
 
-	// Update config and reinitialize provider
+	// First, update config and provider (this doesn't block)
 	a.config.AI.Provider = provider
 	a.config.AI.APIKey = apiKey
 	if a.config.AI.Model == "" {
@@ -533,6 +648,17 @@ func (a *App) SaveAPIKey(provider, apiKey string) error {
 	}
 	a.provider = newProvider
 
+	// Save to keyring (synchronous - may show Keychain access dialog)
+	keyName := provider + "-api-key"
+	if err := keyring.Set(keyringService, keyName, apiKey); err != nil {
+		// Keyring save failed, but API key is already in memory so app can still function
+		// Just emit a warning event
+		runtime.EventsEmit(a.ctx, "keyring-error", fmt.Sprintf("Keychainへの保存に失敗しました: %v", err))
+	} else {
+		// Successfully saved to keyring
+		a.apiKeySource = APIKeySourceKeyring
+	}
+
 	return nil
 }
 
@@ -541,7 +667,7 @@ func (a *App) GetAPIKey(provider string) (string, error) {
 	keyName := provider + "-api-key"
 	secret, err := keyring.Get(keyringService, keyName)
 	if err != nil {
-		if err == keyring.ErrNotFound {
+		if errors.Is(err, keyring.ErrNotFound) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to get API key: %w", err)
@@ -553,7 +679,7 @@ func (a *App) GetAPIKey(provider string) (string, error) {
 func (a *App) DeleteAPIKey(provider string) error {
 	keyName := provider + "-api-key"
 	if err := keyring.Delete(keyringService, keyName); err != nil {
-		if err == keyring.ErrNotFound {
+		if errors.Is(err, keyring.ErrNotFound) {
 			return nil
 		}
 		return fmt.Errorf("failed to delete API key: %w", err)
@@ -566,6 +692,7 @@ type SettingsInfo struct {
 	Provider       string `json:"provider"`
 	Model          string `json:"model"`
 	HasAPIKey      bool   `json:"hasApiKey"`
+	APIKeySource   string `json:"apiKeySource"` // "none", "config_file", "env_var", "keyring"
 	CacheEnabled   bool   `json:"cacheEnabled"`
 	CacheCount     int    `json:"cacheCount"`
 	ServicePattern string `json:"servicePattern"`
@@ -574,7 +701,7 @@ type SettingsInfo struct {
 // GetSettings returns current settings
 func (a *App) GetSettings() SettingsInfo {
 	if a.config == nil {
-		return SettingsInfo{}
+		return SettingsInfo{APIKeySource: string(APIKeySourceNone)}
 	}
 
 	hasKey := a.config.AI.APIKey != ""
@@ -583,6 +710,7 @@ func (a *App) GetSettings() SettingsInfo {
 		Provider:       a.config.AI.Provider,
 		Model:          a.config.AI.Model,
 		HasAPIKey:      hasKey,
+		APIKeySource:   string(a.apiKeySource),
 		CacheEnabled:   a.config.Cache.Enabled,
 		CacheCount:     a.GetCacheCount(),
 		ServicePattern: a.config.Format.ServicePattern,

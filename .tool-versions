@@ -1,4 +1,4 @@
-golang 1.25.6
-nodejs 25.2.1
-pnpm 10.28.0
+nodejs        25.2.1
+pnpm          10.28.0
 golangci-lint 2.6.2
+golang        1.25.6

@@ -30,9 +30,9 @@ type CacheConfig struct {
 }
 
 type FormatConfig struct {
-	Template       string `yaml:"template"`
+	Template       string `yaml:"template,omitempty"`
 	DateFormat     string `yaml:"date_format"`
-	ServicePattern string `yaml:"service_pattern,omitempty"` // サービス名パターン（中間部分のみ）
+	ServicePattern string `yaml:"service_pattern"` // サービス名パターン（中間部分のみ）
 }
 
 func DefaultConfig() *Config {
@@ -72,16 +72,16 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	if err := cfg.resolveEnvVars(); err != nil {
-		return nil, err
-	}
-
-	if err := cfg.autoDetectProvider(); err != nil {
-		return nil, err
-	}
+	cfg.resolveEnvVars()
+	cfg.autoDetectProvider()
 
 	if err := cfg.setDefaultModel(); err != nil {
 		return nil, err
+	}
+
+	// ServicePatternからTemplateを構築
+	if cfg.Format.ServicePattern != "" {
+		cfg.Format.Template = BuildFullTemplate(cfg.Format.ServicePattern)
 	}
 
 	return cfg, nil
@@ -130,7 +130,7 @@ format:
   date_format: "20060102"  # Go date format (YYYYMMDD)
 `
 
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
@@ -150,10 +150,9 @@ func (c *Config) loadFromFile(path string) error {
 	return nil
 }
 
-func (c *Config) resolveEnvVars() error {
+func (c *Config) resolveEnvVars() {
 	c.AI.APIKey = expandEnvVar(c.AI.APIKey)
 	c.AI.BaseURL = expandEnvVar(c.AI.BaseURL)
-	return nil
 }
 
 func expandEnvVar(s string) string {
@@ -164,32 +163,32 @@ func expandEnvVar(s string) string {
 	return s
 }
 
-func (c *Config) autoDetectProvider() error {
+func (c *Config) autoDetectProvider() {
 	if c.AI.Provider != "" && c.AI.APIKey != "" {
-		return nil
+		return
 	}
 
 	if c.AI.APIKey == "" {
 		if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 			c.AI.Provider = "anthropic"
 			c.AI.APIKey = key
-			return nil
+			return
 		}
 
 		if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 			c.AI.Provider = "openai"
 			c.AI.APIKey = key
-			return nil
+			return
 		}
 
-		return fmt.Errorf("no API key found: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable, or specify in config file")
+		// APIキーが見つからなくても、エラーにはしない
+		// GUIアプリではKeychainからの読み込みや後から設定が可能
+		return
 	}
 
 	if c.AI.Provider == "" {
 		c.AI.Provider = "anthropic"
 	}
-
-	return nil
 }
 
 func (c *Config) setDefaultModel() error {
@@ -202,6 +201,9 @@ func (c *Config) setDefaultModel() error {
 		c.AI.Model = "claude-sonnet-4-20250514"
 	case "openai":
 		c.AI.Model = "gpt-4o"
+	case "":
+		// プロバイダーが未設定の場合はモデルも設定しない
+		return nil
 	default:
 		return fmt.Errorf("unknown provider: %s", c.AI.Provider)
 	}
@@ -238,36 +240,52 @@ func DefaultCachePath() string {
 func (c *Config) Save() error {
 	path := DefaultConfigPath()
 
-	// APIキーを除いた設定を保存用にコピー
-	saveConfig := &Config{
-		AI: AIConfig{
-			Provider:   c.AI.Provider,
-			BaseURL:    c.AI.BaseURL,
-			Model:      c.AI.Model,
-			MaxWorkers: c.AI.MaxWorkers,
-			// APIKey は保存しない（Keyringで管理）
-		},
-		Cache: c.Cache,
-		Format: FormatConfig{
-			ServicePattern: c.Format.ServicePattern,
-			DateFormat:     c.Format.DateFormat,
-			// Template は ServicePattern から自動生成されるため保存不要
-		},
-	}
-
-	data, err := yaml.Marshal(saveConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	header := `# receipt-pdf-renamer configuration
+	// コメント付きの設定ファイルを生成
+	content := fmt.Sprintf(`# receipt-pdf-renamer configuration
 # This file is managed by the GUI application.
 # API keys are stored securely in the system keyring.
 
-`
-	content := header + string(data)
+# AI API settings
+ai:
+  # Provider: "anthropic" or "openai"
+  provider: %q
 
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+  # Model name
+  # Anthropic: claude-sonnet-4-20250514
+  # OpenAI: gpt-4o
+  model: %q
+
+  # For OpenAI-compatible APIs (e.g., Ollama, LM Studio)
+  # Leave empty for default Anthropic/OpenAI endpoints
+  base_url: %q
+
+  # Number of parallel workers for analysis
+  max_workers: %d
+
+# Cache settings
+cache:
+  enabled: %t
+  ttl: %d  # Days until cache expires (0 = never expires)
+
+# Rename format settings
+format:
+  # Output filename pattern: YYYYMMDD-{service_pattern}-original.pdf
+  # Available variables: {{.Service}} (service name extracted by AI)
+  # Examples: "{{.Service}}", "MyCompany", "Receipt-{{.Service}}"
+  service_pattern: %q
+  date_format: %q  # Go date format (YYYYMMDD)
+`,
+		c.AI.Provider,
+		c.AI.Model,
+		c.AI.BaseURL,
+		c.AI.MaxWorkers,
+		c.Cache.Enabled,
+		c.Cache.TTL,
+		c.Format.ServicePattern,
+		c.Format.DateFormat,
+	)
+
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
@@ -292,16 +310,14 @@ func LoadWithLocal(globalPath, directory string) (*Config, error) {
 		if err := localCfg.loadFromFile(localPath); err != nil {
 			// ローカル設定の読み込みに失敗した場合は警告を出して続行
 			fmt.Fprintf(os.Stderr, "Warning: failed to load local config %s: %v\n", localPath, err)
-		} else {
+		} else if localCfg.Format.ServicePattern != "" {
 			// サービスパターンが設定されている場合は検証して適用
-			if localCfg.Format.ServicePattern != "" {
-				fullTemplate := BuildFullTemplate(localCfg.Format.ServicePattern)
-				if err := ValidateTemplate(fullTemplate); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: invalid service_pattern in %s: %v (using global config)\n", localPath, err)
-				} else {
-					cfg.Format.ServicePattern = localCfg.Format.ServicePattern
-					cfg.Format.Template = fullTemplate
-				}
+			fullTemplate := BuildFullTemplate(localCfg.Format.ServicePattern)
+			if err := ValidateTemplate(fullTemplate); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: invalid service_pattern in %s: %v (using global config)\n", localPath, err)
+			} else {
+				cfg.Format.ServicePattern = localCfg.Format.ServicePattern
+				cfg.Format.Template = fullTemplate
 			}
 		}
 	}
@@ -353,7 +369,7 @@ func SaveLocalConfig(directory string, servicePattern string) error {
 
 	// ファイルに書き込み
 	content := "# Local overrides for receipt-pdf-renamer\n# This file overrides ~/.config/receipt-pdf-renamer/config.yaml\n\n" + string(data)
-	if err := os.WriteFile(localPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(localPath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write local config: %w", err)
 	}
 

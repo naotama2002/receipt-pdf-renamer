@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "frontend/**"
+      - "build/**"
+      - "wails.json"
+      - ".github/workflows/build.yml"
+      - "Makefile"
+      - ".tool-versions"
   workflow_dispatch:
 
 env:

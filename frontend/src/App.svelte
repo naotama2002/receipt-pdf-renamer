@@ -62,7 +62,7 @@
   onMount(async () => {
     config = await GetConfig();
     hasApiKey = await HasAPIKey();
-    servicePattern = config?.servicePattern || '{{.Service}}';
+    servicePattern = config?.servicePattern || '';
 
     EventsOn('files-updated', (updatedFiles: FileItem[]) => {
       files = updatedFiles;
@@ -74,6 +74,10 @@
       isAnalyzing = false;
     });
 
+    EventsOn('keyring-error', (error: string) => {
+      resultMessage = error;
+    });
+
     // Wails native file drop handler (useDropTarget: false = entire window)
     OnFileDrop(async (x: number, y: number, paths: string[]) => {
       console.log('OnFileDrop called:', x, y, paths);
@@ -81,11 +85,16 @@
         files = await AddFiles(paths);
       }
     }, false);
+
+    // Fetch any files that were added before event listener was registered
+    // (e.g., files passed via Finder "Open With")
+    files = await GetFiles();
   });
 
   onDestroy(() => {
     EventsOff('files-updated');
     EventsOff('analysis-complete');
+    EventsOff('keyring-error');
     OnFileDropOff();
   });
 
@@ -346,6 +355,10 @@
           bind:value={servicePattern}
           class="pattern-input"
           placeholder={`{{.Service}}`}
+          on:keydown={(e) => {
+            if (e.key === 'Enter') savePattern();
+            if (e.key === 'Escape') editingPattern = false;
+          }}
         />
         <button class="btn btn-small" on:click={savePattern}>保存</button>
         <button class="btn btn-small btn-secondary" on:click={() => editingPattern = false}>キャンセル</button>
