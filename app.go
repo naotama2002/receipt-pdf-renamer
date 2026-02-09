@@ -13,6 +13,7 @@ import (
 	"github.com/naotama2002/receipt-pdf-renamer/internal/ai"
 	"github.com/naotama2002/receipt-pdf-renamer/internal/cache"
 	"github.com/naotama2002/receipt-pdf-renamer/internal/config"
+	"github.com/naotama2002/receipt-pdf-renamer/internal/history"
 	"github.com/naotama2002/receipt-pdf-renamer/internal/renamer"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/zalando/go-keyring"
@@ -86,6 +87,7 @@ type App struct {
 	provider ai.Provider
 	cache    *cache.Cache
 	renamer  *renamer.Renamer
+	history  *history.History
 
 	files []FileItem
 	mu    sync.RWMutex
@@ -102,7 +104,8 @@ type App struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
-		files: make([]FileItem, 0),
+		files:   make([]FileItem, 0),
+		history: history.New(),
 	}
 }
 
@@ -521,6 +524,9 @@ func (a *App) UpdateServicePattern(pattern string) error {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
+	// 履歴に追加（エラーは無視）
+	_ = a.AddServicePatternHistory(pattern)
+
 	// Regenerate names for all ready files
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -833,4 +839,14 @@ func (a *App) SaveSettingsWithModel(model, servicePattern string) error {
 	}
 
 	return nil
+}
+
+// GetServicePatternHistory returns the service pattern history (most recent first)
+func (a *App) GetServicePatternHistory() []string {
+	return a.history.Get()
+}
+
+// AddServicePatternHistory adds a pattern to the history (most recent first, no duplicates)
+func (a *App) AddServicePatternHistory(pattern string) error {
+	return a.history.Add(pattern)
 }

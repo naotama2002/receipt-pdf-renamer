@@ -6,6 +6,10 @@ export function AddFiles(arg1) {
   return window['go']['main']['App']['AddFiles'](arg1);
 }
 
+export function AddServicePatternHistory(arg1) {
+  return window['go']['main']['App']['AddServicePatternHistory'](arg1);
+}
+
 export function AnalyzeFiles() {
   return window['go']['main']['App']['AnalyzeFiles']();
 }
@@ -44,6 +48,10 @@ export function GetConfig() {
 
 export function GetFiles() {
   return window['go']['main']['App']['GetFiles']();
+}
+
+export function GetServicePatternHistory() {
+  return window['go']['main']['App']['GetServicePatternHistory']();
 }
 
 export function GetSettings() {
