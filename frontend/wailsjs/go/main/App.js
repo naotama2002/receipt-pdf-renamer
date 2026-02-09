@@ -30,12 +30,8 @@ export function GetAPIKey(arg1) {
   return window['go']['main']['App']['GetAPIKey'](arg1);
 }
 
-export function GetAvailableModels(arg1) {
-  return window['go']['main']['App']['GetAvailableModels'](arg1);
-}
-
-export function GetBaseURL() {
-  return window['go']['main']['App']['GetBaseURL']();
+export function GetAvailableModels() {
+  return window['go']['main']['App']['GetAvailableModels']();
 }
 
 export function GetCacheCount() {
@@ -82,8 +78,8 @@ export function SaveSettings(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveSettings'](arg1, arg2, arg3);
 }
 
-export function SaveSettingsWithEndpoint(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SaveSettingsWithEndpoint'](arg1, arg2, arg3, arg4);
+export function SaveSettingsWithModel(arg1, arg2) {
+  return window['go']['main']['App']['SaveSettingsWithModel'](arg1, arg2);
 }
 
 export function ScanFolder(arg1) {

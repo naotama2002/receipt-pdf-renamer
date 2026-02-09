@@ -149,7 +149,7 @@
 
   async function startAnalysis() {
     if (!hasApiKey) {
-      resultMessage = 'APIキーが設定されていません。環境変数 ANTHROPIC_API_KEY または OPENAI_API_KEY を設定してください。';
+      resultMessage = 'APIキーが設定されていません。環境変数 ANTHROPIC_API_KEY を設定するか、設定画面でAPIキーを入力してください。';
       return;
     }
     isAnalyzing = true;

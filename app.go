@@ -183,21 +183,12 @@ func (a *App) initializeServices() error {
 		}
 	} else if a.apiKeySource == APIKeySourceNone {
 		// プロバイダーが未設定の場合、Keychainに保存されているキーを探す
-		for _, p := range []string{"anthropic", "openai"} {
-			if keyringKey, err := a.getAPIKeyFromKeyring(p); err == nil && keyringKey != "" {
-				cfg.AI.Provider = p
-				cfg.AI.APIKey = keyringKey
-				a.apiKeySource = APIKeySourceKeyring
-				// デフォルトモデルを設定
-				if cfg.AI.Model == "" {
-					switch p {
-					case "anthropic":
-						cfg.AI.Model = "claude-sonnet-4-20250514"
-					case "openai":
-						cfg.AI.Model = "gpt-4o"
-					}
-				}
-				break
+		if keyringKey, err := a.getAPIKeyFromKeyring("anthropic"); err == nil && keyringKey != "" {
+			cfg.AI.Provider = "anthropic"
+			cfg.AI.APIKey = keyringKey
+			a.apiKeySource = APIKeySourceKeyring
+			if cfg.AI.Model == "" {
+				cfg.AI.Model = "claude-sonnet-4-20250514"
 			}
 		}
 	}
@@ -236,8 +227,7 @@ func (a *App) detectAPIKeySource() APIKeySource {
 	// (環境変数参照 ${...} の展開後に値がある場合)
 	if a.config.AI.APIKey != "" {
 		// 環境変数からの可能性をチェック
-		if os.Getenv("ANTHROPIC_API_KEY") == a.config.AI.APIKey ||
-			os.Getenv("OPENAI_API_KEY") == a.config.AI.APIKey {
+		if os.Getenv("ANTHROPIC_API_KEY") == a.config.AI.APIKey {
 			return APIKeySourceEnvVar
 		}
 		return APIKeySourceConfigFile
@@ -620,7 +610,6 @@ func (a *App) GetCacheCount() int {
 const keyringService = "receipt-pdf-renamer"
 
 // SaveAPIKey saves the API key to the system keyring
-// Note: This runs keyring operation in a goroutine to avoid blocking if Keychain dialog appears
 func (a *App) SaveAPIKey(provider, apiKey string) error {
 	// Validate inputs
 	if provider == "" {
@@ -630,33 +619,50 @@ func (a *App) SaveAPIKey(provider, apiKey string) error {
 		return fmt.Errorf("API key is required")
 	}
 
-	// First, update config and provider (this doesn't block)
-	a.config.AI.Provider = provider
-	a.config.AI.APIKey = apiKey
-	if a.config.AI.Model == "" {
-		switch provider {
-		case "anthropic":
-			a.config.AI.Model = "claude-sonnet-4-20250514"
-		case "openai":
-			a.config.AI.Model = "gpt-4o"
-		}
+	// Save original state (struct copy)
+	origAI := a.config.AI
+	origProvider := a.provider
+	origAPIKeySource := a.apiKeySource
+	rollback := func() {
+		a.config.AI = origAI
+		a.provider = origProvider
+		a.apiKeySource = origAPIKeySource
 	}
 
-	newProvider, err := ai.NewProvider(&a.config.AI)
+	// Prepare new model if empty
+	newModel := a.config.AI.Model
+	if newModel == "" {
+		newModel = "claude-sonnet-4-20250514"
+	}
+
+	// Create temporary config for provider creation (validation)
+	tempConfig := a.config.AI
+	tempConfig.Provider = provider
+	tempConfig.APIKey = apiKey
+	tempConfig.Model = newModel
+
+	newAIProvider, err := ai.NewProvider(&tempConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create AI provider: %w", err)
 	}
-	a.provider = newProvider
 
-	// Save to keyring (synchronous - may show Keychain access dialog)
+	// Try to save to keyring
 	keyName := provider + "-api-key"
 	if err := keyring.Set(keyringService, keyName, apiKey); err != nil {
-		// Keyring save failed, but API key is already in memory so app can still function
-		// Just emit a warning event
 		runtime.EventsEmit(a.ctx, "keyring-error", fmt.Sprintf("Keychainへの保存に失敗しました: %v", err))
-	} else {
-		// Successfully saved to keyring
-		a.apiKeySource = APIKeySourceKeyring
+	}
+
+	// Apply changes
+	a.config.AI.Provider = provider
+	a.config.AI.APIKey = apiKey
+	a.config.AI.Model = newModel
+	a.provider = newAIProvider
+	a.apiKeySource = APIKeySourceKeyring
+
+	// Save config file
+	if err := a.config.Save(); err != nil {
+		rollback()
+		return fmt.Errorf("failed to save config: %w", err)
 	}
 
 	return nil
@@ -746,60 +752,83 @@ func (a *App) SaveSettings(provider, model, servicePattern string) error {
 	return nil
 }
 
-// GetAvailableModels returns available models for a provider
-func (a *App) GetAvailableModels(provider string) []string {
-	switch provider {
-	case "anthropic":
-		return []string{
-			"claude-sonnet-4-20250514",
-		}
-	case "openai":
-		// OpenAI is for local LLM, so no preset models
-		return []string{}
-	default:
-		return []string{}
+// GetAvailableModels returns available models
+func (a *App) GetAvailableModels() []string {
+	return []string{
+		"claude-sonnet-4-20250514",
 	}
 }
 
-// GetBaseURL returns the current base URL for OpenAI-compatible API
-func (a *App) GetBaseURL() string {
-	if a.config == nil {
-		return ""
+// SaveSettingsWithModel saves settings with model selection
+func (a *App) SaveSettingsWithModel(model, servicePattern string) error {
+	// Save original state (struct copy)
+	origAI := a.config.AI
+	origFormat := a.config.Format
+	origProvider := a.provider
+	origAPIKeySource := a.apiKeySource
+	rollback := func() {
+		a.config.AI = origAI
+		a.config.Format = origFormat
+		a.provider = origProvider
+		a.apiKeySource = origAPIKeySource
+		_ = a.renamer.UpdateTemplate(origFormat.Template)
 	}
-	return a.config.AI.BaseURL
-}
-
-// SaveSettingsWithEndpoint saves settings including endpoint
-func (a *App) SaveSettingsWithEndpoint(provider, model, baseURL, servicePattern string) error {
-	// Update provider settings
-	a.config.AI.Provider = provider
-	a.config.AI.Model = model
-	a.config.AI.BaseURL = baseURL
 
 	// Try to get API key from keyring
-	apiKey, _ := a.GetAPIKey(provider)
+	apiKey, _ := a.GetAPIKey("anthropic")
+	newAPIKeySource := APIKeySourceNone
 	if apiKey != "" {
-		a.config.AI.APIKey = apiKey
+		newAPIKeySource = APIKeySourceKeyring
 	}
 
-	// Reinitialize provider if we have an API key
-	if a.config.AI.APIKey != "" {
-		newProvider, err := ai.NewProvider(&a.config.AI)
+	// Create temporary config for provider creation (validation)
+	tempConfig := a.config.AI
+	tempConfig.Provider = "anthropic"
+	tempConfig.Model = model
+	if apiKey != "" {
+		tempConfig.APIKey = apiKey
+	}
+
+	// Try to create new provider if we have an API key
+	var newAIProvider ai.Provider
+	if tempConfig.APIKey != "" {
+		var err error
+		newAIProvider, err = ai.NewProvider(&tempConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create AI provider: %w", err)
 		}
-		a.provider = newProvider
 	}
 
-	// Update service pattern if changed
-	if servicePattern != a.config.Format.ServicePattern {
-		if err := a.UpdateServicePattern(servicePattern); err != nil {
-			return err
+	// Validate service pattern if changed
+	if servicePattern != origFormat.ServicePattern {
+		fullTemplate := config.BuildFullTemplate(servicePattern)
+		if err := config.ValidateTemplate(fullTemplate); err != nil {
+			return fmt.Errorf("invalid template: %w", err)
 		}
+	}
+
+	// All validations passed, apply changes
+	a.config.AI.Provider = "anthropic"
+	a.config.AI.Model = model
+	if apiKey != "" {
+		a.config.AI.APIKey = apiKey
+	}
+	if newAIProvider != nil {
+		a.provider = newAIProvider
+	}
+	a.apiKeySource = newAPIKeySource
+
+	// Update service pattern if changed
+	if servicePattern != origFormat.ServicePattern {
+		fullTemplate := config.BuildFullTemplate(servicePattern)
+		a.config.Format.ServicePattern = servicePattern
+		a.config.Format.Template = fullTemplate
+		_ = a.renamer.UpdateTemplate(fullTemplate)
 	}
 
 	// Save settings to config file
 	if err := a.config.Save(); err != nil {
+		rollback()
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 

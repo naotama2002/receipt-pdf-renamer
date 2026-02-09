@@ -6,8 +6,6 @@
 
 ```yaml
 ai:
-  provider: "anthropic"       # "anthropic" or "openai"
-  base_url: ""                # OpenAI互換用（オプション）
   model: "claude-sonnet-4-20250514"
   max_workers: 3
 

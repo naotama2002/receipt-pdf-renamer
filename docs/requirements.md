@@ -46,12 +46,10 @@ AI APIを使ってPDFから支払日とサービス名を抽出し、指定形�
 | プロバイダー | 説明 |
 |-------------|------|
 | **Anthropic** | Claude API（PDF直接送信対応） |
-| **OpenAI互換** | ローカルLLM（Ollama等）、カスタムエンドポイント対応 |
 
 ### PDF送信方法
 
-- **Anthropic**: PDFを直接Base64エンコードして送信
-- **OpenAI互換**: PDFを画像に変換して送信（`poppler` 必要）
+- PDFを直接Base64エンコードして送信
 
 ---
 
@@ -61,8 +59,6 @@ AI APIを使ってPDFから支払日とサービス名を抽出し、指定形�
 
 | 項目 | 説明 |
 |------|------|
-| `ai.provider` | `anthropic` または `openai` |
-| `ai.base_url` | APIエンドポイント（OpenAI互換のみ） |
 | `ai.model` | モデル名 |
 | `ai.max_workers` | 並列処理数（デフォルト: 3） |
 | `cache.enabled` | キャッシュ有効/無効 |

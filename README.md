@@ -5,7 +5,7 @@
 ## 特徴
 
 - **GUIアプリ**: ドラッグ&ドロップでPDFファイルを追加
-- **AI解析**: Anthropic Claude または OpenAI互換API（ローカルLLM対応）でPDFから情報を抽出
+- **AI解析**: Anthropic Claude APIでPDFから情報を抽出
 - **キャッシュ**: 解析結果をキャッシュして再実行を高速化
 - **セキュア**: APIキーはOSのセキュアストレージに保存（macOS Keychain / Windows Credential Manager）
 
@@ -79,9 +79,9 @@ make build-win
 
 1. アプリを起動
 2. 右上の歯車アイコンをクリック
-3. AIプロバイダーとAPIキーを設定
-   - **Anthropic**: claude-sonnet-4 または カスタムモデル
-   - **OpenAI互換**: カスタムモデル + エンドポイントURL（ローカルLLM用）
+3. APIキーを設定
+   - Anthropic APIキーを入力（または環境変数 `ANTHROPIC_API_KEY` で設定）
+   - モデルを選択（デフォルト: claude-sonnet-4）
 
 ### 2. PDFファイルの追加
 
@@ -130,9 +130,7 @@ YYYYMMDD-{ServicePattern}-{OriginalName}.pdf
 
 ```yaml
 ai:
-  provider: "anthropic"
   model: "claude-sonnet-4-20250514"
-  base_url: ""  # OpenAI互換API用
   max_workers: 3
 
 cache:
@@ -155,15 +153,6 @@ APIキーはOSのセキュアストレージに安全に保存されます。設
 | プロバイダー | モデル | 用途 |
 |------------|--------|------|
 | Anthropic | claude-sonnet-4 / カスタム | Claude API |
-| OpenAI互換 | カスタム | OpenAI API / ローカルLLM (Ollama, LM Studio等) |
-
-### ローカルLLMの設定例
-
-Ollamaを使用する場合:
-
-1. プロバイダー: 「OpenAI互換」
-2. モデル名: `llama3` (使用するモデル名)
-3. エンドポイントURL: `http://localhost:11434/v1`
 
 ## 開発
 
