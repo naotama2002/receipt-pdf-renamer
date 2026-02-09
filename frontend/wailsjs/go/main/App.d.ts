@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function AddFiles(arg1:Array<string>):Promise<Array<main.FileItem>>;
 
+export function AddServicePatternHistory(arg1:string):Promise<void>;
+
 export function AnalyzeFiles():Promise<void>;
 
 export function ClearCache():Promise<void>;
@@ -23,6 +25,8 @@ export function GetCacheCount():Promise<number>;
 export function GetConfig():Promise<main.ConfigInfo>;
 
 export function GetFiles():Promise<Array<main.FileItem>>;
+
+export function GetServicePatternHistory():Promise<Array<string>>;
 
 export function GetSettings():Promise<main.SettingsInfo>;
 

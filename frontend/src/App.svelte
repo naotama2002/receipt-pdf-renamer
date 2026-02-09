@@ -14,7 +14,8 @@
     OpenFileDialog,
     OpenFolderDialog,
     ScanFolder,
-    UpdateServicePattern
+    UpdateServicePattern,
+    GetServicePatternHistory
   } from '../wailsjs/go/main/App.js';
   import { EventsOn, EventsOff, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime.js';
   import Settings from './lib/Settings.svelte';
@@ -58,6 +59,9 @@
   let editingPattern = false;
   let showSettings = false;
   let settingsComponent: Settings;
+  let patternHistory: string[] = [];
+  let patternInputEl: HTMLInputElement;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(async () => {
     config = await GetConfig();
@@ -200,10 +204,42 @@
       await UpdateServicePattern(servicePattern);
       editingPattern = false;
       files = await GetFiles();
+      // 履歴を更新
+      patternHistory = await GetServicePatternHistory();
     } catch (e: any) {
       resultMessage = `テンプレートエラー: ${e}`;
     }
   }
+
+  async function startEditingPattern() {
+    editingPattern = true;
+    // 履歴を読み込む
+    patternHistory = await GetServicePatternHistory();
+    // 入力欄にフォーカス
+    setTimeout(() => patternInputEl?.focus(), 0);
+  }
+
+  function selectFromHistory(pattern: string) {
+    servicePattern = pattern;
+    // 入力欄にフォーカスを移す
+    setTimeout(() => patternInputEl?.focus(), 0);
+  }
+
+  function cancelEditing() {
+    editingPattern = false;
+  }
+
+  // フィルタリングされた履歴（リアクティブ）
+  $: filteredHistory = patternHistory.filter(p => {
+    if (!servicePattern || servicePattern.trim() === '') {
+      return true; // 空欄なら全件表示
+    }
+    // 部分一致（大文字小文字区別なし）
+    return p.toLowerCase().includes(servicePattern.toLowerCase());
+  });
+
+  // 編集中かつ履歴があればドロップダウン表示
+  $: showSuggestions = editingPattern && filteredHistory.length > 0;
 
   function getStatusLabel(status: string): string {
     switch (status) {
@@ -350,22 +386,46 @@
     <div class="pattern-editor" class:pattern-empty={servicePatternIsEmpty}>
       <span class="pattern-label">サービス名:</span>
       {#if editingPattern}
-        <input
-          type="text"
-          bind:value={servicePattern}
-          class="pattern-input"
-          placeholder={`{{.Service}}`}
-          on:keydown={(e) => {
-            if (e.key === 'Enter') savePattern();
-            if (e.key === 'Escape') editingPattern = false;
-          }}
-        />
+        <div class="pattern-input-wrapper">
+          <input
+            type="text"
+            bind:this={patternInputEl}
+            bind:value={servicePattern}
+            class="pattern-input"
+            class:has-suggestions={showSuggestions}
+            placeholder={`{{.Service}}`}
+            autocomplete="off"
+            on:keydown={(e) => {
+              if (e.key === 'Enter') savePattern();
+              if (e.key === 'Escape') cancelEditing();
+            }}
+          />
+          {#if showSuggestions}
+            <div class="history-dropdown">
+              <div class="history-header">
+                {#if servicePattern && servicePattern.trim() !== ''}
+                  候補
+                {:else}
+                  履歴
+                {/if}
+              </div>
+              {#each filteredHistory as historyItem}
+                <button
+                  class="history-item"
+                  on:click={() => selectFromHistory(historyItem)}
+                >
+                  <code>{historyItem}</code>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
         <button class="btn btn-small" on:click={savePattern}>保存</button>
-        <button class="btn btn-small btn-secondary" on:click={() => editingPattern = false}>キャンセル</button>
+        <button class="btn btn-small btn-secondary" on:click={cancelEditing}>キャンセル</button>
         <span class="pattern-hint">※ {'{{.Service}}'} = 解析されたサービス名</span>
       {:else}
         <code class="pattern-display" class:empty={servicePatternIsEmpty}>{getPatternPreview(servicePattern)}</code>
-        <button class="btn btn-small btn-primary" on:click={() => editingPattern = true}>
+        <button class="btn btn-small btn-primary" on:click={startEditingPattern}>
           {servicePatternIsEmpty ? '設定する' : '編集'}
         </button>
       {/if}
@@ -674,12 +734,73 @@
     color: #333;
   }
 
+  .pattern-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
   .pattern-input {
     padding: 5px 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-family: monospace;
     width: 200px;
+  }
+
+  .pattern-input.has-suggestions {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-color: transparent;
+  }
+
+  .history-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .history-header {
+    padding: 6px 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #999;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+  }
+
+  .history-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .history-item:last-child {
+    border-bottom: none;
+  }
+
+  .history-item:hover {
+    background: #f0f4ff;
+  }
+
+  .history-item code {
+    font-size: 0.85rem;
+    color: #333;
   }
 
   .pattern-preview {
