@@ -243,7 +243,6 @@ func TestAutoDetectProvider(t *testing.T) {
 		openaiEnv    string
 		wantProvider string
 		wantAPIKey   string
-		wantErr      bool
 	}{
 		{
 			name:         "already configured",
@@ -272,8 +271,9 @@ func TestAutoDetectProvider(t *testing.T) {
 			wantAPIKey:   "sk-ant-xxx",
 		},
 		{
-			name:    "no api key found",
-			wantErr: true,
+			name:         "no api key found - just empty",
+			wantProvider: "",
+			wantAPIKey:   "",
 		},
 		{
 			name:         "api key set but no provider defaults to anthropic",
@@ -305,19 +305,13 @@ func TestAutoDetectProvider(t *testing.T) {
 				},
 			}
 
-			err := cfg.autoDetectProvider()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("autoDetectProvider() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			cfg.autoDetectProvider()
 
-			if !tt.wantErr {
-				if cfg.AI.Provider != tt.wantProvider {
-					t.Errorf("Provider = %q, want %q", cfg.AI.Provider, tt.wantProvider)
-				}
-				if cfg.AI.APIKey != tt.wantAPIKey {
-					t.Errorf("APIKey = %q, want %q", cfg.AI.APIKey, tt.wantAPIKey)
-				}
+			if cfg.AI.Provider != tt.wantProvider {
+				t.Errorf("Provider = %q, want %q", cfg.AI.Provider, tt.wantProvider)
+			}
+			if cfg.AI.APIKey != tt.wantAPIKey {
+				t.Errorf("APIKey = %q, want %q", cfg.AI.APIKey, tt.wantAPIKey)
 			}
 		})
 	}

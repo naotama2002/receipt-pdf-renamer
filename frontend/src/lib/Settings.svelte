@@ -18,9 +18,19 @@
     provider: string;
     model: string;
     hasApiKey: boolean;
+    apiKeySource: string; // "none", "config_file", "env_var", "keyring"
     cacheEnabled: boolean;
     cacheCount: number;
     servicePattern: string;
+  }
+
+  function getApiKeySourceLabel(source: string): string {
+    switch (source) {
+      case 'config_file': return '設定ファイル';
+      case 'env_var': return '環境変数';
+      case 'keyring': return 'Keychain';
+      default: return '未設定';
+    }
   }
 
   let settings: SettingsInfo | null = null;
@@ -238,9 +248,14 @@
             bind:value={apiKey}
             placeholder={settings?.hasApiKey ? '(設定済み - 変更する場合は入力)' : 'APIキーを入力'}
           />
-          {#if settings?.hasApiKey}
-            <button class="btn btn-small btn-danger" on:click={removeAPIKey}>キーを削除</button>
-          {/if}
+          <div class="api-key-info">
+            {#if settings?.hasApiKey}
+              <span class="api-key-source">取得元: <strong>{getApiKeySourceLabel(settings.apiKeySource)}</strong></span>
+              <button class="btn btn-small btn-danger" on:click={removeAPIKey}>キーを削除</button>
+            {:else}
+              <span class="api-key-source no-key">APIキーが設定されていません</span>
+            {/if}
+          </div>
         </div>
       </section>
 
@@ -478,5 +493,25 @@
   .btn-small {
     padding: 5px 10px;
     font-size: 0.85rem;
+  }
+
+  .api-key-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .api-key-source {
+    font-size: 0.85rem;
+    color: #666;
+  }
+
+  .api-key-source strong {
+    color: #1976d2;
+  }
+
+  .api-key-source.no-key {
+    color: #e65100;
   }
 </style>
