@@ -9,12 +9,9 @@ receipt-pdf-renamer/
 ├── internal/
 │   ├── ai/
 │   │   ├── provider.go        # Provider インターフェース
-│   │   ├── anthropic.go       # Anthropic Claude 実装
-│   │   └── openai.go          # OpenAI/互換 実装
+│   │   └── anthropic.go       # Anthropic Claude 実装
 │   ├── config/
 │   │   └── config.go          # 設定ファイル読み込み・保存
-│   ├── pdf/
-│   │   └── converter.go       # PDF → 画像変換（OpenAI用）
 │   ├── cache/
 │   │   └── cache.go           # キャッシュ管理
 │   └── renamer/
@@ -94,7 +91,7 @@ receipt-pdf-renamer/
 | メソッド | 説明 |
 |---------|------|
 | `GetSettings()` | 現在の設定取得 |
-| `SaveSettingsWithEndpoint(...)` | 設定保存 |
+| `SaveSettingsWithModel(...)` | 設定保存 |
 | `SaveAPIKey(provider, key)` | APIキーをキーチェーンに保存 |
 | `GetAPIKey(provider)` | キーチェーンからAPIキー取得 |
 | `DeleteAPIKey(provider)` | APIキー削除 |
@@ -135,10 +132,6 @@ type ReceiptInfo struct {
 - PDFを直接Base64エンコードして送信
 - `application/pdf` として処理
 
-### OpenAI/互換 実装
-- PDFを画像に変換して送信（Vision API）
-- `poppler` の `pdftoppm` が必要
-
 ---
 
 ## 処理フロー
@@ -156,18 +149,12 @@ type ReceiptInfo struct {
     │    cache    │ │ ai/provider │ │   renamer   │
     └─────────────┘ └──────┬──────┘ └─────────────┘
                            │
-               ┌───────────┴───────────┐
-               │                       │
-               ▼                       ▼
-        ┌─────────────┐         ┌─────────────┐
-        │  anthropic  │         │   openai    │
-        │ (PDF直接)   │         │ (画像変換)  │
-        └─────────────┘         └──────┬──────┘
-                                       │
-                                       ▼
-                                ┌─────────────┐
-                                │ pdf/convert │
-                                └─────────────┘
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │  anthropic  │
+                   │ (PDF直接)   │
+                   └─────────────┘
 ```
 
 ---
@@ -192,6 +179,5 @@ type ReceiptInfo struct {
 |-----------|------|
 | `github.com/wailsapp/wails/v2` | GUIフレームワーク |
 | `github.com/anthropics/anthropic-sdk-go` | Anthropic Claude API |
-| `github.com/sashabaranov/go-openai` | OpenAI API（互換含む） |
 | `github.com/zalando/go-keyring` | OSキーチェーン連携 |
 | `gopkg.in/yaml.v3` | 設定ファイル |

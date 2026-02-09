@@ -21,9 +21,7 @@ func NewProvider(cfg *config.AIConfig) (Provider, error) {
 	switch cfg.Provider {
 	case "anthropic":
 		return NewAnthropicProvider(cfg)
-	case "openai":
-		return NewOpenAIProvider(cfg)
 	default:
-		return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
+		return nil, fmt.Errorf("unknown provider: %s (only 'anthropic' is supported)", cfg.Provider)
 	}
 }

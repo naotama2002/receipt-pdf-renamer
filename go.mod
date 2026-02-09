@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.20.0
-	github.com/sashabaranov/go-openai v1.41.2
 	github.com/wailsapp/wails/v2 v2.11.0
 	github.com/zalando/go-keyring v0.2.6
 	gopkg.in/yaml.v3 v3.0.1

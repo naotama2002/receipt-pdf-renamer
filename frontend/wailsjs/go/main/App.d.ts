@@ -16,9 +16,7 @@ export function DeselectAll():Promise<void>;
 
 export function GetAPIKey(arg1:string):Promise<string>;
 
-export function GetAvailableModels(arg1:string):Promise<Array<string>>;
-
-export function GetBaseURL():Promise<string>;
+export function GetAvailableModels():Promise<Array<string>>;
 
 export function GetCacheCount():Promise<number>;
 
@@ -42,7 +40,7 @@ export function SaveAPIKey(arg1:string,arg2:string):Promise<void>;
 
 export function SaveSettings(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function SaveSettingsWithEndpoint(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function SaveSettingsWithModel(arg1:string,arg2:string):Promise<void>;
 
 export function ScanFolder(arg1:string):Promise<Array<string>>;
 

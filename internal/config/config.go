@@ -18,7 +18,6 @@ type Config struct {
 
 type AIConfig struct {
 	Provider   string `yaml:"provider,omitempty"`
-	BaseURL    string `yaml:"base_url,omitempty"`
 	APIKey     string `yaml:"api_key,omitempty"`
 	Model      string `yaml:"model,omitempty"`
 	MaxWorkers int    `yaml:"max_workers"`
@@ -97,21 +96,13 @@ func createDefaultConfigFile(path string) error {
 
 # AI API settings
 ai:
-  # Provider: "anthropic" or "openai"
-  # If not specified, auto-detected from environment variables
-  # provider: "anthropic"
-
   # API key (can use environment variable reference)
-  # If not specified, uses ANTHROPIC_API_KEY or OPENAI_API_KEY from environment
+  # If not specified, uses ANTHROPIC_API_KEY from environment
   # api_key: "${ANTHROPIC_API_KEY}"
 
   # Model name (optional, uses default if not specified)
-  # Anthropic: claude-sonnet-4-20250514
-  # OpenAI: gpt-4o
+  # Default: claude-sonnet-4-20250514
   # model: "claude-sonnet-4-20250514"
-
-  # For OpenAI-compatible APIs (e.g., Ollama, LM Studio)
-  # base_url: "http://localhost:11434/v1"
 
   # Number of parallel workers for analysis
   max_workers: 3
@@ -152,7 +143,6 @@ func (c *Config) loadFromFile(path string) error {
 
 func (c *Config) resolveEnvVars() {
 	c.AI.APIKey = expandEnvVar(c.AI.APIKey)
-	c.AI.BaseURL = expandEnvVar(c.AI.BaseURL)
 }
 
 func expandEnvVar(s string) string {
@@ -174,13 +164,6 @@ func (c *Config) autoDetectProvider() {
 			c.AI.APIKey = key
 			return
 		}
-
-		if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-			c.AI.Provider = "openai"
-			c.AI.APIKey = key
-			return
-		}
-
 		// APIキーが見つからなくても、エラーにはしない
 		// GUIアプリではKeychainからの読み込みや後から設定が可能
 		return
@@ -199,8 +182,6 @@ func (c *Config) setDefaultModel() error {
 	switch c.AI.Provider {
 	case "anthropic":
 		c.AI.Model = "claude-sonnet-4-20250514"
-	case "openai":
-		c.AI.Model = "gpt-4o"
 	case "":
 		// プロバイダーが未設定の場合はモデルも設定しない
 		return nil
@@ -215,12 +196,10 @@ func (c *Config) ProviderDisplayName() string {
 	switch c.AI.Provider {
 	case "anthropic":
 		return "Anthropic Claude API"
-	case "openai":
-		if c.AI.BaseURL != "" {
-			return fmt.Sprintf("OpenAI-compatible API (%s)", c.AI.BaseURL)
-		}
-		return "OpenAI API"
 	default:
+		if c.AI.Provider == "" {
+			return "未設定"
+		}
 		return c.AI.Provider
 	}
 }
@@ -247,17 +226,8 @@ func (c *Config) Save() error {
 
 # AI API settings
 ai:
-  # Provider: "anthropic" or "openai"
-  provider: %q
-
-  # Model name
-  # Anthropic: claude-sonnet-4-20250514
-  # OpenAI: gpt-4o
+  # Model name (default: claude-sonnet-4-20250514)
   model: %q
-
-  # For OpenAI-compatible APIs (e.g., Ollama, LM Studio)
-  # Leave empty for default Anthropic/OpenAI endpoints
-  base_url: %q
 
   # Number of parallel workers for analysis
   max_workers: %d
@@ -275,9 +245,7 @@ format:
   service_pattern: %q
   date_format: %q  # Go date format (YYYYMMDD)
 `,
-		c.AI.Provider,
 		c.AI.Model,
-		c.AI.BaseURL,
 		c.AI.MaxWorkers,
 		c.Cache.Enabled,
 		c.Cache.TTL,

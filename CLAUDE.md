@@ -34,10 +34,9 @@ make generate         # Wailsバインディング更新
 main.go                 # Wailsエントリーポイント
 app.go                  # Wails App構造体・バックエンドAPI
 internal/
-  ai/                   # AI プロバイダー (Anthropic, OpenAI)
+  ai/                   # AI プロバイダー (Anthropic Claude)
   cache/                # 解析結果キャッシュ (SHA256ハッシュベース)
   config/               # 設定管理
-  pdf/                  # PDF→画像変換 (OpenAI用)
   renamer/              # ファイルリネーム処理
 frontend/
   src/
@@ -83,9 +82,9 @@ build/
 - `AddFiles(paths)` - ファイル追加
 - `AnalyzeFiles()` - AI解析実行
 - `RenameFiles()` - リネーム実行
-- `GetSettings()` / `SaveSettingsWithEndpoint()` - 設定取得・保存
+- `GetSettings()` / `SaveSettingsWithModel()` - 設定取得・保存
 - `SaveAPIKey()` / `GetAPIKey()` / `DeleteAPIKey()` - APIキー管理（Keyring）
-- `GetAvailableModels(provider)` - 利用可能モデル取得
+- `GetAvailableModels()` - 利用可能モデル取得
 
 ## リネームフォーマット
 
@@ -96,7 +95,7 @@ build/
 
 ## テスト時の注意
 
-- AI APIキーが必要 (`ANTHROPIC_API_KEY` または `OPENAI_API_KEY`)
+- AI APIキーが必要 (`ANTHROPIC_API_KEY`)
 - PDFファイルは `.gitignore` で除外されている
 - `wails dev` で開発モード起動
 

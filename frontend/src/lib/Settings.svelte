@@ -2,12 +2,11 @@
   import { createEventDispatcher } from 'svelte';
   import {
     GetSettings,
-    SaveSettingsWithEndpoint,
+    SaveSettingsWithModel,
     SaveAPIKey,
     GetAPIKey,
     DeleteAPIKey,
     GetAvailableModels,
-    GetBaseURL,
     ClearCache,
     GetCacheCount
   } from '../../wailsjs/go/main/App.js';
@@ -34,11 +33,9 @@
   }
 
   let settings: SettingsInfo | null = null;
-  let provider = 'anthropic';
   let model = '';
   let customModel = '';
   let useCustomModel = false;
-  let baseURL = '';
   let apiKey = '';
   let servicePattern = '';
   let availableModels: string[] = [];
@@ -49,15 +46,13 @@
 
   export async function open() {
     settings = await GetSettings();
-    provider = settings.provider || 'anthropic';
     model = settings.model || '';
     servicePattern = settings.servicePattern || '';
     cacheCount = settings.cacheCount || 0;
     apiKey = '';
-    baseURL = await GetBaseURL() || '';
 
     // Load available models
-    availableModels = await GetAvailableModels(provider);
+    availableModels = await GetAvailableModels();
 
     // Check if current model is in preset list
     if (model && !availableModels.includes(model)) {
@@ -71,41 +66,11 @@
       }
     }
 
-    // OpenAI always uses custom model (for local LLM)
-    if (provider === 'openai') {
-      useCustomModel = true;
-      customModel = model;
-    }
-
     // Check if API key exists (don't show it, just indicate)
-    const existingKey = await GetAPIKey(provider);
+    const existingKey = await GetAPIKey('anthropic');
     if (existingKey) {
       apiKey = ''; // Don't show actual key, just placeholder
     }
-  }
-
-  async function onProviderChange() {
-    availableModels = await GetAvailableModels(provider);
-
-    if (provider === 'openai') {
-      // OpenAI: always custom model
-      useCustomModel = true;
-      customModel = '';
-      model = '';
-    } else {
-      // Anthropic: preset model by default
-      useCustomModel = false;
-      customModel = '';
-      if (availableModels.length > 0) {
-        model = availableModels[0];
-      }
-      // Clear baseURL when switching to Anthropic
-      baseURL = '';
-    }
-
-    // Check if API key exists for new provider
-    const existingKey = await GetAPIKey(provider);
-    apiKey = '';
   }
 
   async function saveChanges() {
@@ -115,14 +80,14 @@
     try {
       // Save API key if provided
       if (apiKey.trim()) {
-        await SaveAPIKey(provider, apiKey.trim());
+        await SaveAPIKey('anthropic', apiKey.trim());
       }
 
       // Determine which model to save
       const modelToSave = useCustomModel ? customModel : model;
 
-      // Save other settings with endpoint
-      await SaveSettingsWithEndpoint(provider, modelToSave, baseURL, servicePattern);
+      // Save other settings
+      await SaveSettingsWithModel(modelToSave, servicePattern);
 
       message = '設定を保存しました';
       messageType = 'success';
@@ -155,7 +120,7 @@
 
   async function removeAPIKey() {
     try {
-      await DeleteAPIKey(provider);
+      await DeleteAPIKey('anthropic');
       message = 'APIキーを削除しました';
       messageType = 'success';
     } catch (e: any) {
@@ -178,65 +143,33 @@
 
     <div class="modal-body">
       <section class="setting-section">
-        <h3>AI プロバイダー</h3>
+        <h3>AI設定 (Anthropic Claude)</h3>
+
         <div class="form-group">
-          <label for="provider">プロバイダー</label>
-          <select id="provider" bind:value={provider} on:change={onProviderChange}>
-            <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai">OpenAI互換 (ローカルLLM/GPT)</option>
+          <label for="model">モデル</label>
+          <select id="model" bind:value={model} disabled={useCustomModel}>
+            {#each availableModels as m}
+              <option value={m}>{m}</option>
+            {/each}
           </select>
         </div>
 
-        {#if provider === 'anthropic'}
-          <div class="form-group">
-            <label for="model">モデル</label>
-            <select id="model" bind:value={model} disabled={useCustomModel}>
-              {#each availableModels as m}
-                <option value={m}>{m}</option>
-              {/each}
-            </select>
-          </div>
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" bind:checked={useCustomModel} />
+            カスタムモデルを使用
+          </label>
+        </div>
 
-          <div class="form-group checkbox-group">
-            <label>
-              <input type="checkbox" bind:checked={useCustomModel} />
-              カスタムモデルを使用
-            </label>
-          </div>
-
-          {#if useCustomModel}
-            <div class="form-group">
-              <label for="customModel">カスタムモデル名</label>
-              <input
-                type="text"
-                id="customModel"
-                bind:value={customModel}
-                placeholder="例: claude-3-5-sonnet-20241022"
-              />
-            </div>
-          {/if}
-        {:else}
-          <!-- OpenAI: ローカルLLM向け、カスタムモデルのみ -->
+        {#if useCustomModel}
           <div class="form-group">
-            <label for="customModel">モデル名</label>
+            <label for="customModel">カスタムモデル名</label>
             <input
               type="text"
               id="customModel"
               bind:value={customModel}
-              placeholder="例: gpt-4o, llama3, etc."
+              placeholder="例: claude-3-5-sonnet-20241022"
             />
-            <span class="hint">ローカルLLMの場合、使用するモデル名を入力</span>
-          </div>
-
-          <div class="form-group">
-            <label for="baseURL">エンドポイントURL</label>
-            <input
-              type="text"
-              id="baseURL"
-              bind:value={baseURL}
-              placeholder="例: http://localhost:11434/v1"
-            />
-            <span class="hint">OpenAI互換APIのエンドポイント（ローカルLLM用）</span>
           </div>
         {/if}
 

@@ -139,7 +139,6 @@ func TestProviderDisplayName(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider string
-		baseURL  string
 		want     string
 	}{
 		{
@@ -148,15 +147,9 @@ func TestProviderDisplayName(t *testing.T) {
 			want:     "Anthropic Claude API",
 		},
 		{
-			name:     "openai without custom url",
-			provider: "openai",
-			want:     "OpenAI API",
-		},
-		{
-			name:     "openai with custom url",
-			provider: "openai",
-			baseURL:  "http://localhost:11434",
-			want:     "OpenAI-compatible API (http://localhost:11434)",
+			name:     "empty provider",
+			provider: "",
+			want:     "未設定",
 		},
 		{
 			name:     "unknown provider",
@@ -170,7 +163,6 @@ func TestProviderDisplayName(t *testing.T) {
 			cfg := &Config{
 				AI: AIConfig{
 					Provider: tt.provider,
-					BaseURL:  tt.baseURL,
 				},
 			}
 			got := cfg.ProviderDisplayName()
@@ -193,11 +185,6 @@ func TestSetDefaultModel(t *testing.T) {
 			name:      "anthropic default",
 			provider:  "anthropic",
 			wantModel: "claude-sonnet-4-20250514",
-		},
-		{
-			name:      "openai default",
-			provider:  "openai",
-			wantModel: "gpt-4o",
 		},
 		{
 			name:          "existing model not overwritten",
@@ -240,7 +227,6 @@ func TestAutoDetectProvider(t *testing.T) {
 		provider     string
 		apiKey       string
 		anthropicEnv string
-		openaiEnv    string
 		wantProvider string
 		wantAPIKey   string
 	}{
@@ -254,19 +240,6 @@ func TestAutoDetectProvider(t *testing.T) {
 		{
 			name:         "detect from ANTHROPIC_API_KEY",
 			anthropicEnv: "sk-ant-xxx",
-			wantProvider: "anthropic",
-			wantAPIKey:   "sk-ant-xxx",
-		},
-		{
-			name:         "detect from OPENAI_API_KEY",
-			openaiEnv:    "sk-xxx",
-			wantProvider: "openai",
-			wantAPIKey:   "sk-xxx",
-		},
-		{
-			name:         "anthropic takes priority",
-			anthropicEnv: "sk-ant-xxx",
-			openaiEnv:    "sk-xxx",
 			wantProvider: "anthropic",
 			wantAPIKey:   "sk-ant-xxx",
 		},
@@ -287,15 +260,10 @@ func TestAutoDetectProvider(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// 環境変数をクリア
 			os.Unsetenv("ANTHROPIC_API_KEY")
-			os.Unsetenv("OPENAI_API_KEY")
 
 			if tt.anthropicEnv != "" {
 				os.Setenv("ANTHROPIC_API_KEY", tt.anthropicEnv)
 				defer os.Unsetenv("ANTHROPIC_API_KEY")
-			}
-			if tt.openaiEnv != "" {
-				os.Setenv("OPENAI_API_KEY", tt.openaiEnv)
-				defer os.Unsetenv("OPENAI_API_KEY")
 			}
 
 			cfg := &Config{
