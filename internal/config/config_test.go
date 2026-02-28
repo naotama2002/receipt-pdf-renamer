@@ -111,17 +111,17 @@ func TestBuildFullTemplate(t *testing.T) {
 		{
 			name:           "with service variable",
 			servicePattern: "{{.Service}}",
-			want:           "{{.Date}}-{{.Service}}-{{.OriginalName}}",
+			want:           "{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}",
 		},
 		{
 			name:           "with static string",
 			servicePattern: "MyCompany",
-			want:           "{{.Date}}-MyCompany-{{.OriginalName}}",
+			want:           "{{.Date}}({{.Amount}})-MyCompany-{{.OriginalName}}",
 		},
 		{
 			name:           "empty pattern",
 			servicePattern: "",
-			want:           "{{.Date}}--{{.OriginalName}}",
+			want:           "{{.Date}}({{.Amount}})--{{.OriginalName}}",
 		},
 	}
 

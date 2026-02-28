@@ -27,6 +27,7 @@
     newName: string;
     date: string;
     service: string;
+    amount: string;
     status: string;
     error: string;
     selected: boolean;
@@ -303,6 +304,7 @@
   $: sampleFile = files.find(f => f.service && (f.status === 'ready' || f.status === 'cached'));
   $: sampleServiceName = sampleFile?.service || 'サービス名';
   $: sampleDate = sampleFile?.date || '20250207';
+  $: sampleAmount = sampleFile?.amount || '$100.00';
   $: sampleOriginalName = sampleFile ? sampleFile.originalName.replace('.pdf', '') : 'invoice';
 
   // Generate preview with actual values
@@ -430,7 +432,7 @@
         </button>
       {/if}
       {#if !servicePatternIsEmpty}
-        <span class="pattern-preview">例: {sampleDate}-{getPatternPreview(servicePattern)}-{sampleOriginalName}.pdf</span>
+        <span class="pattern-preview">例: {sampleDate}({sampleAmount})-{getPatternPreview(servicePattern)}-{sampleOriginalName}.pdf</span>
       {:else}
         <span class="pattern-warning">リネームするにはサービス名を設定してください</span>
       {/if}

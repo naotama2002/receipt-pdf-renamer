@@ -102,39 +102,53 @@ func TestGenerateName(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:         "standard template",
+			name:         "standard template with amount",
+			template:     "{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}",
+			originalPath: "/path/to/Receipt-001.pdf",
+			info:         &ai.ReceiptInfo{Date: "20250115", Service: "Cursor", Amount: "$100.00"},
+			want:         "20250115($100.00)-Cursor-Receipt-001.pdf",
+		},
+		{
+			name:         "service with spaces gets sanitized",
+			template:     "{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}",
+			originalPath: "/path/to/Invoice.pdf",
+			info:         &ai.ReceiptInfo{Date: "20250120", Service: "GitHub Copilot", Amount: "$20.00"},
+			want:         "20250120($20.00)-GitHub-Copilot-Invoice.pdf",
+		},
+		{
+			name:         "static service pattern",
+			template:     "{{.Date}}({{.Amount}})-MyCompany-{{.OriginalName}}",
+			originalPath: "/path/to/receipt.pdf",
+			info:         &ai.ReceiptInfo{Date: "20250101", Service: "Ignored", Amount: "¥10,000"},
+			want:         "20250101(¥10,000)-MyCompany-receipt.pdf",
+		},
+		{
+			name:         "preserves extension",
+			template:     "{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}",
+			originalPath: "/path/to/file.PDF",
+			info:         &ai.ReceiptInfo{Date: "20250101", Service: "Test", Amount: "€50.00"},
+			want:         "20250101(€50.00)-Test-file.PDF",
+		},
+		{
+			name:         "handles file without extension",
+			template:     "{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}",
+			originalPath: "/path/to/noextension",
+			info:         &ai.ReceiptInfo{Date: "20250101", Service: "Test", Amount: "$25.00"},
+			want:         "20250101($25.00)-Test-noextension",
+		},
+		{
+			name:         "empty amount shows empty parentheses",
+			template:     "{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}",
+			originalPath: "/path/to/receipt.pdf",
+			info:         &ai.ReceiptInfo{Date: "20250101", Service: "Test", Amount: ""},
+			want:         "20250101()-Test-receipt.pdf",
+		},
+		{
+			name:         "legacy template without amount",
 			template:     "{{.Date}}-{{.Service}}-{{.OriginalName}}",
 			originalPath: "/path/to/Receipt-001.pdf",
 			info:         &ai.ReceiptInfo{Date: "20250115", Service: "Cursor"},
 			want:         "20250115-Cursor-Receipt-001.pdf",
-		},
-		{
-			name:         "service with spaces gets sanitized",
-			template:     "{{.Date}}-{{.Service}}-{{.OriginalName}}",
-			originalPath: "/path/to/Invoice.pdf",
-			info:         &ai.ReceiptInfo{Date: "20250120", Service: "GitHub Copilot"},
-			want:         "20250120-GitHub-Copilot-Invoice.pdf",
-		},
-		{
-			name:         "static service pattern",
-			template:     "{{.Date}}-MyCompany-{{.OriginalName}}",
-			originalPath: "/path/to/receipt.pdf",
-			info:         &ai.ReceiptInfo{Date: "20250101", Service: "Ignored"},
-			want:         "20250101-MyCompany-receipt.pdf",
-		},
-		{
-			name:         "preserves extension",
-			template:     "{{.Date}}-{{.Service}}-{{.OriginalName}}",
-			originalPath: "/path/to/file.PDF",
-			info:         &ai.ReceiptInfo{Date: "20250101", Service: "Test"},
-			want:         "20250101-Test-file.PDF",
-		},
-		{
-			name:         "handles file without extension",
-			template:     "{{.Date}}-{{.Service}}-{{.OriginalName}}",
-			originalPath: "/path/to/noextension",
-			info:         &ai.ReceiptInfo{Date: "20250101", Service: "Test"},
-			want:         "20250101-Test-noextension",
 		},
 	}
 
@@ -170,22 +184,22 @@ func TestUpdateTemplate(t *testing.T) {
 	}
 
 	// 初期テンプレートでの生成
-	info := &ai.ReceiptInfo{Date: "20250115", Service: "Cursor"}
+	info := &ai.ReceiptInfo{Date: "20250115", Service: "Cursor", Amount: "$20.00"}
 	got, _ := r.GenerateName("/path/to/test.pdf", info)
 	if got != "20250115-test.pdf" {
 		t.Errorf("Initial template: got %q, want %q", got, "20250115-test.pdf")
 	}
 
 	// テンプレート更新
-	err = r.UpdateTemplate("{{.Date}}-{{.Service}}-{{.OriginalName}}")
+	err = r.UpdateTemplate("{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}")
 	if err != nil {
 		t.Fatalf("UpdateTemplate() error = %v", err)
 	}
 
 	// 更新後のテンプレートでの生成
 	got, _ = r.GenerateName("/path/to/test.pdf", info)
-	if got != "20250115-Cursor-test.pdf" {
-		t.Errorf("Updated template: got %q, want %q", got, "20250115-Cursor-test.pdf")
+	if got != "20250115($20.00)-Cursor-test.pdf" {
+		t.Errorf("Updated template: got %q, want %q", got, "20250115($20.00)-Cursor-test.pdf")
 	}
 }
 

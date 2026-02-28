@@ -20,6 +20,7 @@ type Renamer struct {
 type TemplateData struct {
 	Date         string
 	Service      string
+	Amount       string
 	OriginalName string
 }
 
@@ -50,10 +51,12 @@ func (r *Renamer) GenerateName(originalPath string, info *ai.ReceiptInfo) (strin
 	nameWithoutExt := strings.TrimSuffix(originalName, ext)
 
 	serviceName := sanitizeFilename(info.Service)
+	amount := sanitizeAmount(info.Amount)
 
 	data := TemplateData{
 		Date:         info.Date,
 		Service:      serviceName,
+		Amount:       amount,
 		OriginalName: nameWithoutExt,
 	}
 
@@ -79,6 +82,24 @@ func (r *Renamer) Rename(oldPath, newName string) error {
 	}
 
 	return nil
+}
+
+// sanitizeAmount は金額文字列からファイル名として不正な文字を除去する
+// $, ¥, €, (, ), ., , は保持する
+func sanitizeAmount(s string) string {
+	replacer := strings.NewReplacer(
+		"/", "",
+		"\\", "",
+		":", "",
+		"*", "",
+		"?", "",
+		"\"", "",
+		"<", "",
+		">", "",
+		"|", "",
+		" ", "",
+	)
+	return replacer.Replace(s)
 }
 
 func sanitizeFilename(s string) string {

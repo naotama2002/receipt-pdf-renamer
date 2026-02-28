@@ -99,9 +99,16 @@ func parseResponse(message *anthropic.Message) (*ReceiptInfo, error) {
 	return &info, nil
 }
 
-const analyzePrompt = `この領収書/請求書から以下の情報を抽出してください：
-1. 支払日（Paid date / Invoice date / Date）をYYYYMMDD形式で
-2. サービス名/会社名
+const analyzePrompt = `この領収書/請求書/明細書PDFを読み取り、以下の3つの情報を抽出してください。
+
+1. **支払日**: Paid date / Invoice date / Date / 発行日 / 請求日 / 利用日をYYYYMMDD形式で。複数の日付がある場合は支払日・請求日を優先。
+2. **サービス名/会社名**: 請求元・発行元の会社名またはサービス名。
+3. **合計金額（Total Amount）**: 請求書・領収書に記載された最終的な支払い合計金額を通貨記号付きで抽出してください。
+   - "Total", "Amount Due", "Amount Charged", "合計", "請求金額", "お支払い金額", "ご利用金額" などのラベルに対応する金額を探す
+   - 小計(Subtotal)ではなく、税込みの最終合計金額を優先する
+   - 通貨記号を必ず含める（$, ¥, €, £ など）。記号がない場合は文脈から判断する
+   - 桁区切り(カンマ)や小数点はそのまま保持する（例: $1,234.56, ¥10,000）
+   - 金額が見つからない場合は空文字列にする
 
 必ず以下のJSON形式のみで回答してください。説明文は不要です：
-{"date": "YYYYMMDD", "service": "サービス名"}`
+{"date": "YYYYMMDD", "service": "サービス名", "amount": "$100.00"}`
