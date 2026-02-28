@@ -44,7 +44,7 @@ func DefaultConfig() *Config {
 			TTL:     0,
 		},
 		Format: FormatConfig{
-			Template:       "{{.Date}}-{{.Service}}-{{.OriginalName}}",
+			Template:       "{{.Date}}({{.Amount}})-{{.Service}}-{{.OriginalName}}",
 			DateFormat:     "20060102",
 			ServicePattern: "",
 		},
@@ -114,7 +114,7 @@ cache:
 
 # Rename format settings
 format:
-  # Output: YYYYMMDD-{service_pattern}-original.pdf
+  # Output: YYYYMMDD(amount)-{service_pattern}-original.pdf
   # Available: {{.Service}} (service name from receipt)
   # Set your pattern before renaming (e.g., "{{.Service}}" or "MyCompany")
   service_pattern: ""
@@ -239,7 +239,7 @@ cache:
 
 # Rename format settings
 format:
-  # Output filename pattern: YYYYMMDD-{service_pattern}-original.pdf
+  # Output filename pattern: YYYYMMDD(amount)-{service_pattern}-original.pdf
   # Available variables: {{.Service}} (service name extracted by AI)
   # Examples: "{{.Service}}", "MyCompany", "Receipt-{{.Service}}"
   service_pattern: %q
@@ -295,7 +295,7 @@ func LoadWithLocal(globalPath, directory string) (*Config, error) {
 
 // BuildFullTemplate はサービスパターンからフルテンプレートを構築する
 func BuildFullTemplate(servicePattern string) string {
-	return "{{.Date}}-" + servicePattern + "-{{.OriginalName}}"
+	return "{{.Date}}({{.Amount}})-" + servicePattern + "-{{.OriginalName}}"
 }
 
 // ValidateTemplate はテンプレートが有効かどうかを検証する

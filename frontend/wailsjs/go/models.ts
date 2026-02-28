@@ -27,6 +27,7 @@ export namespace main {
 	    newName: string;
 	    date: string;
 	    service: string;
+	    amount: string;
 	    status: string;
 	    error: string;
 	    selected: boolean;
@@ -44,6 +45,7 @@ export namespace main {
 	        this.newName = source["newName"];
 	        this.date = source["date"];
 	        this.service = source["service"];
+	        this.amount = source["amount"];
 	        this.status = source["status"];
 	        this.error = source["error"];
 	        this.selected = source["selected"];

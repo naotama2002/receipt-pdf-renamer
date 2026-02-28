@@ -19,8 +19,9 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// isAlreadyRenamed checks if the filename matches the renamed pattern (YYYYMMDD-xxx-xxx.pdf)
-var renamedPattern = regexp.MustCompile(`^\d{8}-.+-.+\.pdf$`)
+// isAlreadyRenamed checks if the filename matches the renamed pattern
+// Matches both: YYYYMMDD(amount)-xxx-xxx.pdf and YYYYMMDD-xxx-xxx.pdf (legacy)
+var renamedPattern = regexp.MustCompile(`^\d{8}(\(.+\))?-.+-.+\.pdf$`)
 
 func isAlreadyRenamed(filename string) bool {
 	return renamedPattern.MatchString(filename)
@@ -47,6 +48,7 @@ type FileItem struct {
 	NewName        string     `json:"newName"`
 	Date           string     `json:"date"`
 	Service        string     `json:"service"`
+	Amount         string     `json:"amount"`
 	Status         ItemStatus `json:"status"`
 	Error          string     `json:"error"`
 	Selected       bool       `json:"selected"`
@@ -424,6 +426,7 @@ func (a *App) analyzeFile(idx int) {
 				a.mu.Lock()
 				a.files[idx].Date = info.Date
 				a.files[idx].Service = info.Service
+				a.files[idx].Amount = info.Amount
 				a.files[idx].NewName = newName
 				a.files[idx].Status = StatusCached
 				a.mu.Unlock()
@@ -460,6 +463,7 @@ func (a *App) analyzeFile(idx int) {
 	a.mu.Lock()
 	a.files[idx].Date = info.Date
 	a.files[idx].Service = info.Service
+	a.files[idx].Amount = info.Amount
 	a.files[idx].NewName = newName
 	a.files[idx].Status = StatusReady
 	a.mu.Unlock()
@@ -536,6 +540,7 @@ func (a *App) UpdateServicePattern(pattern string) error {
 			info := &ai.ReceiptInfo{
 				Date:    a.files[i].Date,
 				Service: a.files[i].Service,
+				Amount:  a.files[i].Amount,
 			}
 			newName, err := a.renamer.GenerateName(a.files[i].OriginalPath, info)
 			if err == nil {

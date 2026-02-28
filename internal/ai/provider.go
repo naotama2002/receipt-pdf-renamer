@@ -10,6 +10,7 @@ import (
 type ReceiptInfo struct {
 	Date    string `json:"date"`
 	Service string `json:"service"`
+	Amount  string `json:"amount"`
 }
 
 type Provider interface {
