@@ -28,6 +28,10 @@ vendor/
 .DS_Store
 Thumbs.db
 
+# Claude Code
+.claude/*
+!.claude/skills/
+
 # Test
 coverage.out
 coverage.html
