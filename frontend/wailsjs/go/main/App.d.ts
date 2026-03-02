@@ -8,6 +8,8 @@ export function AddServicePatternHistory(arg1:string):Promise<void>;
 
 export function AnalyzeFiles():Promise<void>;
 
+export function CheckPdfToText(arg1:string):Promise<boolean>;
+
 export function ClearCache():Promise<void>;
 
 export function ClearFiles():Promise<void>;
@@ -18,7 +20,9 @@ export function DeselectAll():Promise<void>;
 
 export function GetAPIKey(arg1:string):Promise<string>;
 
-export function GetAvailableModels():Promise<Array<string>>;
+export function GetAvailableModels(arg1:string):Promise<Array<string>>;
+
+export function GetAvailableProviders():Promise<Array<main.ProviderOption>>;
 
 export function GetCacheCount():Promise<number>;
 
@@ -46,9 +50,13 @@ export function SaveSettings(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SaveSettingsWithModel(arg1:string,arg2:string):Promise<void>;
 
+export function SaveSettingsWithProvider(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+
 export function ScanFolder(arg1:string):Promise<Array<string>>;
 
 export function SelectAll():Promise<void>;
+
+export function SelectPdfToTextPath():Promise<string>;
 
 export function ToggleFileSelection(arg1:number):Promise<void>;
 

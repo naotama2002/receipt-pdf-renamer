@@ -14,6 +14,10 @@ export function AnalyzeFiles() {
   return window['go']['main']['App']['AnalyzeFiles']();
 }
 
+export function CheckPdfToText(arg1) {
+  return window['go']['main']['App']['CheckPdfToText'](arg1);
+}
+
 export function ClearCache() {
   return window['go']['main']['App']['ClearCache']();
 }
@@ -34,8 +38,12 @@ export function GetAPIKey(arg1) {
   return window['go']['main']['App']['GetAPIKey'](arg1);
 }
 
-export function GetAvailableModels() {
-  return window['go']['main']['App']['GetAvailableModels']();
+export function GetAvailableModels(arg1) {
+  return window['go']['main']['App']['GetAvailableModels'](arg1);
+}
+
+export function GetAvailableProviders() {
+  return window['go']['main']['App']['GetAvailableProviders']();
 }
 
 export function GetCacheCount() {
@@ -90,12 +98,20 @@ export function SaveSettingsWithModel(arg1, arg2) {
   return window['go']['main']['App']['SaveSettingsWithModel'](arg1, arg2);
 }
 
+export function SaveSettingsWithProvider(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SaveSettingsWithProvider'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function ScanFolder(arg1) {
   return window['go']['main']['App']['ScanFolder'](arg1);
 }
 
 export function SelectAll() {
   return window['go']['main']['App']['SelectAll']();
+}
+
+export function SelectPdfToTextPath() {
+  return window['go']['main']['App']['SelectPdfToTextPath']();
 }
 
 export function ToggleFileSelection(arg1) {

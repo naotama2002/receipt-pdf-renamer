@@ -2,11 +2,14 @@
   import { createEventDispatcher } from 'svelte';
   import {
     GetSettings,
-    SaveSettingsWithModel,
+    SaveSettingsWithProvider,
     SaveAPIKey,
     GetAPIKey,
     DeleteAPIKey,
     GetAvailableModels,
+    GetAvailableProviders,
+    CheckPdfToText,
+    SelectPdfToTextPath,
     ClearCache,
     GetCacheCount
   } from '../../wailsjs/go/main/App.js';
@@ -16,11 +19,20 @@
   interface SettingsInfo {
     provider: string;
     model: string;
+    baseUrl: string;
     hasApiKey: boolean;
     apiKeySource: string; // "none", "config_file", "env_var", "keyring"
     cacheEnabled: boolean;
     cacheCount: number;
     servicePattern: string;
+    pdftotextPath: string;
+  }
+
+  interface ProviderOption {
+    value: string;
+    label: string;
+    needsApiKey: boolean;
+    needsUrl: boolean;
   }
 
   function getApiKeySourceLabel(source: string): string {
@@ -33,43 +45,89 @@
   }
 
   let settings: SettingsInfo | null = null;
+  let provider = 'anthropic';
   let model = '';
   let customModel = '';
   let useCustomModel = false;
+  let baseUrl = '';
+  let openaiModel = '';
   let apiKey = '';
   let servicePattern = '';
   let availableModels: string[] = [];
+  let availableProviders: ProviderOption[] = [];
   let cacheCount = 0;
+  let pdftotextPath = '';
   let saving = false;
   let message = '';
   let messageType: 'success' | 'error' = 'success';
+  let hasPdfToText = false;
+
+  $: currentProviderOption = availableProviders.find(p => p.value === provider);
+  $: needsApiKey = currentProviderOption?.needsApiKey ?? true;
+  $: needsUrl = currentProviderOption?.needsUrl ?? false;
 
   export async function open() {
     settings = await GetSettings();
+    provider = settings.provider || 'anthropic';
     model = settings.model || '';
+    baseUrl = settings.baseUrl || '';
     servicePattern = settings.servicePattern || '';
+    pdftotextPath = settings.pdftotextPath || '';
     cacheCount = settings.cacheCount || 0;
     apiKey = '';
 
-    // Load available models
-    availableModels = await GetAvailableModels();
+    // Load available providers
+    availableProviders = await GetAvailableProviders();
 
-    // Check if current model is in preset list
-    if (model && !availableModels.includes(model)) {
-      useCustomModel = true;
-      customModel = model;
-    } else {
+    // Load available models for current provider
+    availableModels = await GetAvailableModels(provider);
+
+    // Check pdftotext availability
+    hasPdfToText = await CheckPdfToText(pdftotextPath);
+
+    if (provider === 'openai-compatible') {
+      openaiModel = model;
       useCustomModel = false;
       customModel = '';
-      if (!model && availableModels.length > 0) {
-        model = availableModels[0];
+    } else {
+      openaiModel = '';
+      // Check if current model is in preset list
+      if (model && !availableModels.includes(model)) {
+        useCustomModel = true;
+        customModel = model;
+      } else {
+        useCustomModel = false;
+        customModel = '';
+        if (!model && availableModels.length > 0) {
+          model = availableModels[0];
+        }
       }
     }
 
     // Check if API key exists (don't show it, just indicate)
-    const existingKey = await GetAPIKey('anthropic');
-    if (existingKey) {
-      apiKey = ''; // Don't show actual key, just placeholder
+    if (provider !== 'openai-compatible') {
+      const existingKey = await GetAPIKey(provider);
+      if (existingKey) {
+        apiKey = ''; // Don't show actual key, just placeholder
+      }
+    }
+  }
+
+  async function onProviderChange() {
+    availableModels = await GetAvailableModels(provider);
+    hasPdfToText = await CheckPdfToText(pdftotextPath);
+
+    if (provider === 'openai-compatible') {
+      useCustomModel = false;
+      customModel = '';
+      openaiModel = '';
+    } else {
+      openaiModel = '';
+      useCustomModel = false;
+      customModel = '';
+      if (availableModels.length > 0) {
+        model = availableModels[0];
+      }
     }
   }
 
@@ -80,14 +138,19 @@
     try {
       // Save API key if provided
       if (apiKey.trim()) {
-        await SaveAPIKey('anthropic', apiKey.trim());
+        await SaveAPIKey(provider, apiKey.trim());
       }
 
       // Determine which model to save
-      const modelToSave = useCustomModel ? customModel : model;
+      let modelToSave: string;
+      if (provider === 'openai-compatible') {
+        modelToSave = openaiModel;
+      } else {
+        modelToSave = useCustomModel ? customModel : model;
+      }
 
-      // Save other settings
-      await SaveSettingsWithModel(modelToSave, servicePattern);
+      // Save settings with provider info
+      await SaveSettingsWithProvider(provider, baseUrl, modelToSave, servicePattern, pdftotextPath);
 
       message = '設定を保存しました';
       messageType = 'success';
@@ -120,12 +183,24 @@
 
   async function removeAPIKey() {
     try {
-      await DeleteAPIKey('anthropic');
+      await DeleteAPIKey(provider);
       message = 'APIキーを削除しました';
       messageType = 'success';
     } catch (e: any) {
       message = `エラー: ${e}`;
       messageType = 'error';
+    }
+  }
+
+  async function onPdftotextPathChange() {
+    hasPdfToText = await CheckPdfToText(pdftotextPath);
+  }
+
+  async function browsePdftotextPath() {
+    const selected = await SelectPdfToTextPath();
+    if (selected) {
+      pdftotextPath = selected;
+      hasPdfToText = await CheckPdfToText(pdftotextPath);
     }
   }
 
@@ -143,53 +218,126 @@
 
     <div class="modal-body">
       <section class="setting-section">
-        <h3>AI設定 (Anthropic Claude)</h3>
+        <h3>AI設定</h3>
 
         <div class="form-group">
-          <label for="model">モデル</label>
-          <select id="model" bind:value={model} disabled={useCustomModel}>
-            {#each availableModels as m}
-              <option value={m}>{m}</option>
+          <label for="provider">プロバイダー</label>
+          <select id="provider" bind:value={provider} on:change={onProviderChange}>
+            {#each availableProviders as p}
+              <option value={p.value}>{p.label}</option>
             {/each}
           </select>
         </div>
 
-        <div class="form-group checkbox-group">
-          <label>
-            <input type="checkbox" bind:checked={useCustomModel} />
-            カスタムモデルを使用
-          </label>
-        </div>
-
-        {#if useCustomModel}
+        {#if provider === 'anthropic'}
+          <!-- Anthropic: モデル選択（プリセット+カスタム） -->
           <div class="form-group">
-            <label for="customModel">カスタムモデル名</label>
+            <label for="model">モデル</label>
+            <select id="model" bind:value={model} disabled={useCustomModel}>
+              {#each availableModels as m}
+                <option value={m}>{m}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" bind:checked={useCustomModel} />
+              カスタムモデルを使用
+            </label>
+          </div>
+
+          {#if useCustomModel}
+            <div class="form-group">
+              <label for="customModel">カスタムモデル名</label>
+              <input
+                type="text"
+                id="customModel"
+                bind:value={customModel}
+                placeholder="例: claude-3-5-sonnet-20241022"
+              />
+            </div>
+          {/if}
+
+          <div class="form-group">
+            <label for="apiKey">APIキー</label>
+            <input
+              type="password"
+              id="apiKey"
+              bind:value={apiKey}
+              placeholder={settings?.hasApiKey ? '(設定済み - 変更する場合は入力)' : 'APIキーを入力'}
+            />
+            <div class="api-key-info">
+              {#if settings?.hasApiKey}
+                <span class="api-key-source">取得元: <strong>{getApiKeySourceLabel(settings.apiKeySource)}</strong></span>
+                <button class="btn btn-small btn-danger" on:click={removeAPIKey}>キーを削除</button>
+              {:else}
+                <span class="api-key-source no-key">APIキーが設定されていません</span>
+              {/if}
+            </div>
+          </div>
+        {:else if provider === 'openai-compatible'}
+          <!-- OpenAI互換: エンドポイントURL + モデル名 -->
+          <div class="form-group">
+            <label for="baseUrl">エンドポイントURL</label>
             <input
               type="text"
-              id="customModel"
-              bind:value={customModel}
-              placeholder="例: claude-3-5-sonnet-20241022"
+              id="baseUrl"
+              bind:value={baseUrl}
+              placeholder="例: http://localhost:11434/v1"
+            />
+            <span class="hint">Ollama: http://localhost:11434/v1, LM Studio: http://localhost:1234/v1</span>
+          </div>
+
+          <div class="form-group">
+            <label for="openaiModel">モデル名</label>
+            <input
+              type="text"
+              id="openaiModel"
+              bind:value={openaiModel}
+              placeholder="例: llama3, gemma2, qwen2.5"
             />
           </div>
-        {/if}
 
-        <div class="form-group">
-          <label for="apiKey">APIキー</label>
-          <input
-            type="password"
-            id="apiKey"
-            bind:value={apiKey}
-            placeholder={settings?.hasApiKey ? '(設定済み - 変更する場合は入力)' : 'APIキーを入力'}
-          />
-          <div class="api-key-info">
-            {#if settings?.hasApiKey}
-              <span class="api-key-source">取得元: <strong>{getApiKeySourceLabel(settings.apiKeySource)}</strong></span>
-              <button class="btn btn-small btn-danger" on:click={removeAPIKey}>キーを削除</button>
-            {:else}
-              <span class="api-key-source no-key">APIキーが設定されていません</span>
+          <div class="form-group">
+            <label for="apiKeyOpenai">APIキー (任意)</label>
+            <input
+              type="password"
+              id="apiKeyOpenai"
+              bind:value={apiKey}
+              placeholder="不要な場合は空欄のまま"
+            />
+            <span class="hint">ローカルLLMでは通常不要です</span>
+          </div>
+
+          <div class="form-group">
+            <label for="pdftotextPath">pdftotext パス</label>
+            <div class="path-input-group">
+              <input
+                type="text"
+                id="pdftotextPath"
+                bind:value={pdftotextPath}
+                on:change={onPdftotextPathChange}
+                placeholder="空欄 = 自動検出 (PATH から探索)"
+              />
+              <button class="btn btn-small btn-secondary" on:click={browsePdftotextPath}>参照</button>
+            </div>
+            <span class="hint">Finder等から起動する場合はフルパスを指定してください (例: /opt/homebrew/bin/pdftotext)</span>
+            {#if hasPdfToText}
+              <span class="hint pdftotext-ok">pdftotext が利用可能です</span>
             {/if}
           </div>
-        </div>
+
+          {#if !hasPdfToText}
+            <div class="warning-box">
+              <strong>pdftotext が見つかりません</strong>
+              <p>OpenAI互換プロバイダーにはpoppler（pdftotext）が必要です。</p>
+              <p class="hint">上の「参照」ボタンからpdftotextの場所を指定するか、インストールしてください。</p>
+              <p class="hint">macOS: <code>brew install poppler</code></p>
+              <p class="hint">Windows: <code>choco install poppler</code> or <code>scoop install poppler</code></p>
+            </div>
+          {/if}
+        {/if}
       </section>
 
       <section class="setting-section">
@@ -340,6 +488,14 @@
     margin-top: 5px;
   }
 
+  .hint code {
+    background: #f5f5f5;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.8rem;
+  }
+
   .checkbox-group {
     display: flex;
     align-items: center;
@@ -380,6 +536,26 @@
   .message.error {
     background: #ffebee;
     color: #c62828;
+  }
+
+  .warning-box {
+    background: #fff3e0;
+    border: 1px solid #ffcc02;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 15px;
+  }
+
+  .warning-box strong {
+    color: #e65100;
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .warning-box p {
+    margin: 4px 0;
+    font-size: 0.85rem;
+    color: #666;
   }
 
   .btn {
@@ -446,5 +622,23 @@
 
   .api-key-source.no-key {
     color: #e65100;
+  }
+
+  .path-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .path-input-group input {
+    flex: 1;
+  }
+
+  .path-input-group .btn {
+    flex-shrink: 0;
+  }
+
+  .pdftotext-ok {
+    color: #2e7d32 !important;
   }
 </style>

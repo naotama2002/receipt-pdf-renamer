@@ -17,10 +17,12 @@ type Config struct {
 }
 
 type AIConfig struct {
-	Provider   string `yaml:"provider,omitempty"`
-	APIKey     string `yaml:"api_key,omitempty"`
-	Model      string `yaml:"model,omitempty"`
-	MaxWorkers int    `yaml:"max_workers"`
+	Provider       string `yaml:"provider,omitempty"`
+	APIKey         string `yaml:"api_key,omitempty"`
+	Model          string `yaml:"model,omitempty"`
+	BaseURL        string `yaml:"base_url,omitempty"`
+	MaxWorkers     int    `yaml:"max_workers"`
+	PdfToTextPath  string `yaml:"pdftotext_path,omitempty"`
 }
 
 type CacheConfig struct {
@@ -143,6 +145,7 @@ func (c *Config) loadFromFile(path string) error {
 
 func (c *Config) resolveEnvVars() {
 	c.AI.APIKey = expandEnvVar(c.AI.APIKey)
+	c.AI.BaseURL = expandEnvVar(c.AI.BaseURL)
 }
 
 func expandEnvVar(s string) string {
@@ -182,6 +185,9 @@ func (c *Config) setDefaultModel() error {
 	switch c.AI.Provider {
 	case "anthropic":
 		c.AI.Model = "claude-sonnet-4-20250514"
+	case "openai-compatible":
+		// OpenAI互換はデフォルトモデルなし（ユーザーが指定）
+		return nil
 	case "":
 		// プロバイダーが未設定の場合はモデルも設定しない
 		return nil
@@ -196,6 +202,8 @@ func (c *Config) ProviderDisplayName() string {
 	switch c.AI.Provider {
 	case "anthropic":
 		return "Anthropic Claude API"
+	case "openai-compatible":
+		return "OpenAI互換 (ローカルLLM)"
 	default:
 		if c.AI.Provider == "" {
 			return "未設定"
@@ -226,8 +234,18 @@ func (c *Config) Save() error {
 
 # AI API settings
 ai:
-  # Model name (default: claude-sonnet-4-20250514)
+  # Provider: "anthropic" or "openai-compatible"
+  provider: %q
+
+  # Model name (default for anthropic: claude-sonnet-4-20250514)
   model: %q
+
+  # Base URL for OpenAI-compatible provider (e.g., http://localhost:11434/v1)
+  base_url: %q
+
+  # Path to pdftotext command (required for OpenAI-compatible provider)
+  # Leave empty to auto-detect from PATH
+  pdftotext_path: %q
 
   # Number of parallel workers for analysis
   max_workers: %d
@@ -245,7 +263,10 @@ format:
   service_pattern: %q
   date_format: %q  # Go date format (YYYYMMDD)
 `,
+		c.AI.Provider,
 		c.AI.Model,
+		c.AI.BaseURL,
+		c.AI.PdfToTextPath,
 		c.AI.MaxWorkers,
 		c.Cache.Enabled,
 		c.Cache.TTL,
