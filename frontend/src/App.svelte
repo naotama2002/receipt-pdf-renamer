@@ -154,7 +154,7 @@
 
   async function startAnalysis() {
     if (!hasApiKey) {
-      resultMessage = 'APIキーが設定されていません。環境変数 ANTHROPIC_API_KEY を設定するか、設定画面でAPIキーを入力してください。';
+      resultMessage = 'AI設定が完了していません。設定画面からプロバイダーの設定を行ってください。';
       return;
     }
     isAnalyzing = true;
@@ -476,7 +476,7 @@
 
   {#if !hasApiKey}
     <div class="warning">
-      APIキーが設定されていません。<button class="btn-link" on:click={openSettings}>設定画面</button>からAPIキーを設定してください。
+      AI設定が完了していません。<button class="btn-link" on:click={openSettings}>設定画面</button>からプロバイダーの設定を行ってください。
     </div>
   {/if}
 </main>

@@ -14,6 +14,7 @@ import (
 	"github.com/naotama2002/receipt-pdf-renamer/internal/cache"
 	"github.com/naotama2002/receipt-pdf-renamer/internal/config"
 	"github.com/naotama2002/receipt-pdf-renamer/internal/history"
+	"github.com/naotama2002/receipt-pdf-renamer/internal/pdf"
 	"github.com/naotama2002/receipt-pdf-renamer/internal/renamer"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/zalando/go-keyring"
@@ -198,8 +199,18 @@ func (a *App) initializeServices() error {
 		}
 	}
 
-	// APIキーがある場合のみプロバイダーを初期化
-	if cfg.AI.Provider != "" && cfg.AI.APIKey != "" {
+	// プロバイダーを初期化
+	if cfg.AI.Provider == "openai-compatible" {
+		// OpenAI互換はBaseURL+Modelが必須、APIキーは任意
+		if cfg.AI.BaseURL != "" && cfg.AI.Model != "" {
+			provider, err := ai.NewProvider(&cfg.AI)
+			if err != nil {
+				return fmt.Errorf("failed to create AI provider: %w", err)
+			}
+			a.provider = provider
+		}
+	} else if cfg.AI.Provider != "" && cfg.AI.APIKey != "" {
+		// Anthropic等はAPIキーが必須
 		provider, err := ai.NewProvider(&cfg.AI)
 		if err != nil {
 			return fmt.Errorf("failed to create AI provider: %w", err)
@@ -266,9 +277,16 @@ func (a *App) GetConfig() ConfigInfo {
 	}
 }
 
-// HasAPIKey checks if an API key is configured
+// HasAPIKey checks if AI provider is properly configured
 func (a *App) HasAPIKey() bool {
-	return a.config != nil && a.config.AI.APIKey != ""
+	if a.config == nil {
+		return false
+	}
+	// OpenAI互換の場合はBaseURL+Modelがあれば利用可能（APIキーは任意）
+	if a.config.AI.Provider == "openai-compatible" {
+		return a.config.AI.BaseURL != "" && a.config.AI.Model != ""
+	}
+	return a.config.AI.APIKey != ""
 }
 
 // AddFiles adds PDF files to the list
@@ -642,7 +660,7 @@ func (a *App) SaveAPIKey(provider, apiKey string) error {
 
 	// Prepare new model if empty
 	newModel := a.config.AI.Model
-	if newModel == "" {
+	if newModel == "" && provider == "anthropic" {
 		newModel = "claude-sonnet-4-20250514"
 	}
 
@@ -708,11 +726,21 @@ func (a *App) DeleteAPIKey(provider string) error {
 type SettingsInfo struct {
 	Provider       string `json:"provider"`
 	Model          string `json:"model"`
+	BaseURL        string `json:"baseUrl"`
 	HasAPIKey      bool   `json:"hasApiKey"`
 	APIKeySource   string `json:"apiKeySource"` // "none", "config_file", "env_var", "keyring"
 	CacheEnabled   bool   `json:"cacheEnabled"`
 	CacheCount     int    `json:"cacheCount"`
 	ServicePattern string `json:"servicePattern"`
+	PdfToTextPath  string `json:"pdftotextPath"`
+}
+
+// ProviderOption はプロバイダー選択肢
+type ProviderOption struct {
+	Value       string `json:"value"`
+	Label       string `json:"label"`
+	NeedsAPIKey bool   `json:"needsApiKey"`
+	NeedsURL    bool   `json:"needsUrl"`
 }
 
 // GetSettings returns current settings
@@ -726,11 +754,13 @@ func (a *App) GetSettings() SettingsInfo {
 	return SettingsInfo{
 		Provider:       a.config.AI.Provider,
 		Model:          a.config.AI.Model,
+		BaseURL:        a.config.AI.BaseURL,
 		HasAPIKey:      hasKey,
 		APIKeySource:   string(a.apiKeySource),
 		CacheEnabled:   a.config.Cache.Enabled,
 		CacheCount:     a.GetCacheCount(),
 		ServicePattern: a.config.Format.ServicePattern,
+		PdfToTextPath:  a.config.AI.PdfToTextPath,
 	}
 }
 
@@ -763,14 +793,125 @@ func (a *App) SaveSettings(provider, model, servicePattern string) error {
 	return nil
 }
 
-// GetAvailableModels returns available models
-func (a *App) GetAvailableModels() []string {
-	return []string{
-		"claude-sonnet-4-20250514",
+// GetAvailableModels returns available models for the given provider
+func (a *App) GetAvailableModels(provider string) []string {
+	switch provider {
+	case "anthropic":
+		return []string{
+			"claude-sonnet-4-20250514",
+		}
+	case "openai-compatible":
+		// ユーザーがフリーテキストで入力
+		return []string{}
+	default:
+		return []string{
+			"claude-sonnet-4-20250514",
+		}
 	}
 }
 
-// SaveSettingsWithModel saves settings with model selection
+// GetAvailableProviders returns available provider options
+func (a *App) GetAvailableProviders() []ProviderOption {
+	return []ProviderOption{
+		{Value: "anthropic", Label: "Anthropic Claude API", NeedsAPIKey: true, NeedsURL: false},
+		{Value: "openai-compatible", Label: "OpenAI互換 (Ollama, LM Studio等)", NeedsAPIKey: false, NeedsURL: true},
+	}
+}
+
+// CheckPdfToText checks if pdftotext command is available at the given path
+// If path is empty, falls back to exec.LookPath
+func (a *App) CheckPdfToText(path string) bool {
+	extractor := pdf.NewExtractor(path)
+	return extractor.IsAvailable()
+}
+
+// SelectPdfToTextPath opens a file dialog to select the pdftotext binary
+func (a *App) SelectPdfToTextPath() string {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "pdftotext の場所を選択",
+	})
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
+// SaveSettingsWithProvider saves settings with provider selection
+func (a *App) SaveSettingsWithProvider(provider, baseURL, model, servicePattern, pdftotextPath string) error {
+	// Save original state (struct copy)
+	origAI := a.config.AI
+	origFormat := a.config.Format
+	origProvider := a.provider
+	origAPIKeySource := a.apiKeySource
+	rollback := func() {
+		a.config.AI = origAI
+		a.config.Format = origFormat
+		a.provider = origProvider
+		a.apiKeySource = origAPIKeySource
+		_ = a.renamer.UpdateTemplate(origFormat.Template)
+	}
+
+	// Validate service pattern if changed
+	if servicePattern != origFormat.ServicePattern {
+		fullTemplate := config.BuildFullTemplate(servicePattern)
+		if err := config.ValidateTemplate(fullTemplate); err != nil {
+			return fmt.Errorf("invalid template: %w", err)
+		}
+	}
+
+	// Update AI config
+	a.config.AI.Provider = provider
+	a.config.AI.Model = model
+	a.config.AI.BaseURL = baseURL
+	a.config.AI.PdfToTextPath = pdftotextPath
+
+	// Try to get API key from keyring
+	apiKey, _ := a.GetAPIKey(provider)
+	if apiKey != "" {
+		a.config.AI.APIKey = apiKey
+		a.apiKeySource = APIKeySourceKeyring
+	}
+
+	// Initialize provider based on type
+	if provider == "openai-compatible" {
+		if baseURL != "" && model != "" {
+			newAIProvider, err := ai.NewProvider(&a.config.AI)
+			if err != nil {
+				rollback()
+				return fmt.Errorf("failed to create AI provider: %w", err)
+			}
+			a.provider = newAIProvider
+		}
+	} else {
+		// Anthropic: APIキーが必要
+		if a.config.AI.APIKey != "" {
+			newAIProvider, err := ai.NewProvider(&a.config.AI)
+			if err != nil {
+				rollback()
+				return fmt.Errorf("failed to create AI provider: %w", err)
+			}
+			a.provider = newAIProvider
+		}
+	}
+
+	// Update service pattern if changed
+	if servicePattern != origFormat.ServicePattern {
+		fullTemplate := config.BuildFullTemplate(servicePattern)
+		a.config.Format.ServicePattern = servicePattern
+		a.config.Format.Template = fullTemplate
+		_ = a.renamer.UpdateTemplate(fullTemplate)
+	}
+
+	// Save settings to config file
+	if err := a.config.Save(); err != nil {
+		rollback()
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	return nil
+}
+
+// SaveSettingsWithModel saves settings with model selection (backward compatibility)
 func (a *App) SaveSettingsWithModel(model, servicePattern string) error {
 	// Save original state (struct copy)
 	origAI := a.config.AI

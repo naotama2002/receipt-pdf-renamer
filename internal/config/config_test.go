@@ -152,6 +152,11 @@ func TestProviderDisplayName(t *testing.T) {
 			want:     "未設定",
 		},
 		{
+			name:     "openai-compatible",
+			provider: "openai-compatible",
+			want:     "OpenAI互換 (ローカルLLM)",
+		},
+		{
 			name:     "unknown provider",
 			provider: "custom",
 			want:     "custom",
@@ -191,6 +196,11 @@ func TestSetDefaultModel(t *testing.T) {
 			provider:      "anthropic",
 			existingModel: "custom-model",
 			wantModel:     "custom-model",
+		},
+		{
+			name:      "openai-compatible no default model",
+			provider:  "openai-compatible",
+			wantModel: "",
 		},
 		{
 			name:     "unknown provider",

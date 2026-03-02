@@ -52,6 +52,24 @@ export namespace main {
 	        this.alreadyRenamed = source["alreadyRenamed"];
 	    }
 	}
+	export class ProviderOption {
+	    value: string;
+	    label: string;
+	    needsApiKey: boolean;
+	    needsUrl: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProviderOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.label = source["label"];
+	        this.needsApiKey = source["needsApiKey"];
+	        this.needsUrl = source["needsUrl"];
+	    }
+	}
 	export class RenameResult {
 	    totalCount: number;
 	    renamedCount: number;
@@ -73,11 +91,13 @@ export namespace main {
 	export class SettingsInfo {
 	    provider: string;
 	    model: string;
+	    baseUrl: string;
 	    hasApiKey: boolean;
 	    apiKeySource: string;
 	    cacheEnabled: boolean;
 	    cacheCount: number;
 	    servicePattern: string;
+	    pdftotextPath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -87,11 +107,13 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.provider = source["provider"];
 	        this.model = source["model"];
+	        this.baseUrl = source["baseUrl"];
 	        this.hasApiKey = source["hasApiKey"];
 	        this.apiKeySource = source["apiKeySource"];
 	        this.cacheEnabled = source["cacheEnabled"];
 	        this.cacheCount = source["cacheCount"];
 	        this.servicePattern = source["servicePattern"];
+	        this.pdftotextPath = source["pdftotextPath"];
 	    }
 	}
 
