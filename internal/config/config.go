@@ -17,12 +17,12 @@ type Config struct {
 }
 
 type AIConfig struct {
-	Provider       string `yaml:"provider,omitempty"`
-	APIKey         string `yaml:"api_key,omitempty"`
-	Model          string `yaml:"model,omitempty"`
-	BaseURL        string `yaml:"base_url,omitempty"`
-	MaxWorkers     int    `yaml:"max_workers"`
-	PdfToTextPath  string `yaml:"pdftotext_path,omitempty"`
+	Provider      string `yaml:"provider,omitempty"`
+	APIKey        string `yaml:"api_key,omitempty"`
+	Model         string `yaml:"model,omitempty"`
+	BaseURL       string `yaml:"base_url,omitempty"`
+	MaxWorkers    int    `yaml:"max_workers"`
+	PdfToTextPath string `yaml:"pdftotext_path,omitempty"`
 }
 
 type CacheConfig struct {

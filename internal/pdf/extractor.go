@@ -38,7 +38,7 @@ func (e *Extractor) ExtractText(pdfPath string) (string, error) {
 		return "", fmt.Errorf("pdftotext not found: install poppler (macOS: brew install poppler)")
 	}
 
-	cmd := exec.Command(e.path, "-layout", pdfPath, "-")
+	cmd := exec.Command(e.path, "-layout", pdfPath, "-") //nolint:gosec // path is user-configured via settings UI
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
