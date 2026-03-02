@@ -38,7 +38,10 @@ func (e *Extractor) ExtractText(pdfPath string) (string, error) {
 		return "", fmt.Errorf("pdftotext not found: install poppler (macOS: brew install poppler)")
 	}
 
-	cmd := exec.Command(e.path, "-layout", pdfPath, "-") //nolint:gosec // path is user-configured via settings UI
+	// G204: e.path はユーザーが設定画面（Settings.svelte）で明示的に指定した pdftotext バイナリのフルパス、
+	// または NewExtractor 内で exec.LookPath により解決されたパスのみが入る。
+	// 外部からの任意入力が渡される経路は存在しないため、コマンドインジェクションのリスクはない。
+	cmd := exec.Command(e.path, "-layout", pdfPath, "-") //nolint:gosec
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
