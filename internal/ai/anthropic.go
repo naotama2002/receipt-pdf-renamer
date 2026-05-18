@@ -101,8 +101,15 @@ func parseResponse(message *anthropic.Message) (*ReceiptInfo, error) {
 
 const analyzePrompt = `この領収書/請求書/明細書PDFを読み取り、以下の3つの情報を抽出してください。
 
-1. **支払日**: Paid date / Invoice date / Date / 発行日 / 請求日 / 利用日をYYYYMMDD形式で。複数の日付がある場合は支払日・請求日を優先。
+1. **支払日**: YYYYMMDD形式で抽出してください。
+   - 優先順位: Payment Date / Paid Date > Invoice Date / 請求日 > Issue Date / 発行日
+   - 月名の変換 (必ず参照): January=01, February=02, March=03, April=04, May=05, June=06,
+     July=07, August=08, September=09, October=10, November=11, December=12
+   - 変換例: "May 3, 2026" → "20260503" / "January 15, 2025" → "20250115"
+   - JSON出力前に「文書内の日付表記 → YYYYMMDD」の変換を確認すること
+
 2. **サービス名/会社名**: 請求元・発行元の会社名またはサービス名。
+
 3. **合計金額（Total Amount）**: 請求書・領収書に記載された最終的な支払い合計金額を通貨記号付きで抽出してください。
    - "Total", "Amount Due", "Amount Charged", "合計", "請求金額", "お支払い金額", "ご利用金額" などのラベルに対応する金額を探す
    - 小計(Subtotal)ではなく、税込みの最終合計金額を優先する
@@ -110,5 +117,5 @@ const analyzePrompt = `この領収書/請求書/明細書PDFを読み取り、�
    - 桁区切り(カンマ)や小数点はそのまま保持する（例: $1,234.56, ¥10,000）
    - 金額が見つからない場合は空文字列にする
 
-必ず以下のJSON形式のみで回答してください。説明文は不要です：
+まず文書内で見つけた日付をそのまま書き出し（例: "Invoice Date: May 3, 2026"）、YYYYMMDD形式に変換してから、以下のJSON形式のみで回答してください：
 {"date": "YYYYMMDD", "service": "サービス名", "amount": "$100.00"}`
