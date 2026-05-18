@@ -87,10 +87,14 @@ type openaiError struct {
 	Message string `json:"message"`
 }
 
+const systemPrompt = `あなたは領収書・請求書の情報を正確に抽出する専門アシスタントです。
+日付抽出では月名を月番号に正確に変換することが重要です。必ず月名対応表を参照して変換してください。`
+
 func (p *OpenAICompatibleProvider) callChatCompletion(ctx context.Context, userMessage string) (string, error) {
 	reqBody := openaiChatRequest{
 		Model: p.model,
 		Messages: []openaiChatMessage{
+			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userMessage},
 		},
 	}
