@@ -26,13 +26,12 @@
 # - Go 1.25+
 # - Node.js 25+
 # - pnpm 10+
-# - Wails CLI (go install github.com/wailsapp/wails/v2/cmd/wails@latest)
 
 git clone https://github.com/naotama2002/receipt-pdf-renamer.git
 cd receipt-pdf-renamer
 
-# フロントエンド依存インストール
-make install-frontend
+# Wails CLI インストール
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
 # 開発モード（ホットリロード）
 make dev
