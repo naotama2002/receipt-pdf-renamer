@@ -38,4 +38,6 @@ coverage.html
 *.pdf
 
 # Local config
+.env*
+
 .receipt-pdf-renamer.yaml
