@@ -6,7 +6,7 @@ export function AddFiles(arg1:Array<string>):Promise<Array<main.FileItem>>;
 
 export function AddServicePatternHistory(arg1:string):Promise<void>;
 
-export function AnalyzeFiles():Promise<void>;
+export function AnalyzeFiles(arg1:boolean):Promise<void>;
 
 export function CheckPdfToText(arg1:string):Promise<boolean>;
 

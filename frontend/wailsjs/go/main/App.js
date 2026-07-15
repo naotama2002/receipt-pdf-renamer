@@ -10,8 +10,8 @@ export function AddServicePatternHistory(arg1) {
   return window['go']['main']['App']['AddServicePatternHistory'](arg1);
 }
 
-export function AnalyzeFiles() {
-  return window['go']['main']['App']['AnalyzeFiles']();
+export function AnalyzeFiles(arg1) {
+  return window['go']['main']['App']['AnalyzeFiles'](arg1);
 }
 
 export function CheckPdfToText(arg1) {

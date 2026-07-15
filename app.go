@@ -387,16 +387,19 @@ func (a *App) DeselectAll() {
 	}
 }
 
-// AnalyzeFiles analyzes the selected files
-func (a *App) AnalyzeFiles() {
-	go a.analyzeFilesAsync()
+// AnalyzeFiles analyzes the selected files.
+// forceRefresh が true の場合、キャッシュを無視して解析済み・エラーのファイルも再解析する。
+func (a *App) AnalyzeFiles(forceRefresh bool) {
+	go a.analyzeFilesAsync(forceRefresh)
 }
 
-func (a *App) analyzeFilesAsync() {
+func (a *App) analyzeFilesAsync(forceRefresh bool) {
 	a.mu.Lock()
 	filesToAnalyze := make([]int, 0)
 	for i, f := range a.files {
-		if f.Status == StatusPending {
+		reanalyzable := f.Status == StatusPending ||
+			(forceRefresh && (f.Status == StatusReady || f.Status == StatusCached || f.Status == StatusError))
+		if reanalyzable {
 			a.files[i].Status = StatusAnalyzing
 			filesToAnalyze = append(filesToAnalyze, i)
 		}
@@ -422,7 +425,7 @@ func (a *App) analyzeFilesAsync() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			a.analyzeFile(fileIdx)
+			a.analyzeFile(fileIdx, forceRefresh)
 			runtime.EventsEmit(a.ctx, "files-updated", a.GetFiles())
 		}(idx)
 	}
@@ -431,13 +434,13 @@ func (a *App) analyzeFilesAsync() {
 	runtime.EventsEmit(a.ctx, "analysis-complete", a.GetFiles())
 }
 
-func (a *App) analyzeFile(idx int) {
+func (a *App) analyzeFile(idx int, forceRefresh bool) {
 	a.mu.RLock()
 	file := a.files[idx]
 	a.mu.RUnlock()
 
-	// Check cache first
-	if a.cache != nil {
+	// Check cache first (forceRefresh の場合はキャッシュを無視して必ずAI解析する)
+	if !forceRefresh && a.cache != nil {
 		if info, found := a.cache.Get(file.OriginalPath); found {
 			newName, err := a.renamer.GenerateName(file.OriginalPath, info)
 			if err == nil {

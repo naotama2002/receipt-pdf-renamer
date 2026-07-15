@@ -58,6 +58,7 @@
   let resultMessage = '';
   let servicePattern = '';
   let editingPattern = false;
+  let ignoreCache = false;
   let showSettings = false;
   let settingsComponent: Settings;
   let patternHistory: string[] = [];
@@ -159,7 +160,7 @@
     }
     isAnalyzing = true;
     resultMessage = '';
-    await AnalyzeFiles();
+    await AnalyzeFiles(ignoreCache);
   }
 
   async function startRename() {
@@ -290,7 +291,11 @@
   $: pendingCount = files.filter(f => f.status === 'pending').length;
   $: readyCount = files.filter(f => f.status === 'ready' || f.status === 'cached').length;
   $: selectedCount = files.filter(f => f.selected && (f.status === 'ready' || f.status === 'cached')).length;
-  $: canAnalyze = pendingCount > 0 && hasApiKey && !isAnalyzing;
+  // キャッシュを無視する場合は、解析済み・エラーのファイルも再解析の対象にする
+  $: reanalyzableCount = ignoreCache
+    ? files.filter(f => f.status === 'pending' || f.status === 'ready' || f.status === 'cached' || f.status === 'error').length
+    : pendingCount;
+  $: canAnalyze = reanalyzableCount > 0 && hasApiKey && !isAnalyzing;
   $: servicePatternIsEmpty = !servicePattern || servicePattern.trim() === '';
   $: canRename = selectedCount > 0 && !isRenaming && !isAnalyzing && !servicePatternIsEmpty;
 
@@ -363,13 +368,17 @@
         {/if}
       </div>
       <div class="toolbar-right">
-        {#if pendingCount > 0}
+        <label class="ignore-cache-toggle">
+          <input type="checkbox" bind:checked={ignoreCache} disabled={isAnalyzing} />
+          キャッシュを無視して解析
+        </label>
+        {#if reanalyzableCount > 0}
           <button
             class="btn btn-primary"
             on:click={startAnalysis}
             disabled={!canAnalyze}
           >
-            {isAnalyzing ? '解析中...' : `解析開始 (${pendingCount}件)`}
+            {isAnalyzing ? '解析中...' : `解析開始 (${reanalyzableCount}件)`}
           </button>
         {/if}
         {#if readyCount > 0}
@@ -702,7 +711,18 @@
 
   .toolbar-right {
     display: flex;
+    align-items: center;
     gap: 10px;
+  }
+
+  .ignore-cache-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: #666;
+    cursor: pointer;
+    user-select: none;
   }
 
   .file-count {
